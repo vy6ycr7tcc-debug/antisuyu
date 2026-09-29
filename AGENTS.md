@@ -20,8 +20,9 @@ should be defensible as a photograph.
 
 ## Renderer rules
 - WebGPU (`three/webgpu`) is the primary renderer; WebGL2 is the required fallback
-  (iOS Safari has no WebGPU). Both paths must boot and be playable; the fallback
-  gets reduced settings, not a black screen.
+  for older devices (Safari has shipped WebGPU since Safari 26 / iOS 26, Sept 2025).
+  Both paths must boot and be playable; the fallback gets reduced settings,
+  not a black screen.
 - Import TSL helpers from `'three/webgpu'` — `build/three.tsl.js` does NOT exist on CDN.
 - `WebGPURenderer` requires `await renderer.init()` before the first render.
 
@@ -30,8 +31,9 @@ should be defensible as a photograph.
 - Keep PRs scoped: one feature per session, one branch per session.
 
 ## Definition of ready (project-level)
-- Boots on desktop Chrome/Edge (WebGPU) AND iPhone Safari (WebGL2 fallback).
-- Sustained 60 fps desktop / 30 fps fallback on target hardware, adaptive quality.
+- Boots on desktop Chrome/Edge (WebGPU) AND iPhone Safari (WebGPU on iOS 26+,
+  WebGL2 fallback below that).
+- Sustained 60 fps desktop / 30 fps fallback, adaptive quality working.
 - 10-minute play session with no crashes or blocking bugs.
 - Core loop completable: explore, traverse, solve, progress the Paititi quest.
 - Screenshot review passes the photorealism bar.
