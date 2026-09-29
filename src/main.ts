@@ -7,6 +7,7 @@ import { createDecor } from './decor.js';
 import { CharacterController } from './character.js';
 import { InputManager } from './input.js';
 import { WebGPURenderer } from 'three/webgpu';
+import { physics } from './physics.js';
 
 // Setup for global hook
 declare global {
@@ -16,6 +17,8 @@ declare global {
 }
 
 async function init() {
+  await physics.init();
+
   const { renderer, quality } = await createRenderer();
 
   // Need to append renderer to the DOM
@@ -25,12 +28,25 @@ async function init() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 
   setupEnvironment(scene, quality);
-  createTerrain(scene);
+  const terrain = createTerrain(scene);
+  physics.createTerrainCollider(terrain);
   const river = createRiver(scene);
   const decor = createDecor(scene);
 
   const input = new InputManager();
   const character = new CharacterController(scene, camera, input);
+
+  if (physics.world) {
+    // Let's add kinematic body to character
+    const rigidBodyDesc = physics.getRapier()?.RigidBodyDesc.kinematicPositionBased();
+    if (rigidBodyDesc) {
+       character.body = physics.world.createRigidBody(rigidBodyDesc);
+       const colliderDesc = physics.getRapier()?.ColliderDesc.capsule(0.5, 0.4);
+       if (colliderDesc) {
+          character.collider = physics.world.createCollider(colliderDesc, character.body);
+       }
+    }
+  }
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -54,6 +70,19 @@ async function init() {
       character.teleport(0, 0, Math.PI / 2);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
+    } else if (shot === 'rockslide') {
+      const startX = 200;
+      const startZ = 0;
+      // Position character looking at the slope
+      character.teleport(150, 0, Math.PI / 2);
+      // y on steep slope ~200
+      physics.spawnRockslide(scene, startX, startZ, 250);
+    } else if (shot === 'bridge') {
+      character.teleport(0, 10, 0);
+      physics.createRopeBridge(scene, new THREE.Vector3(0, 20, -50), new THREE.Vector3(0, 20, 50));
+    } else if (shot === 'buoyancy') {
+      character.teleport(0, 2, 20); // Stand near river looking at it
+      physics.spawnBuoyantDebris(scene, 10);
     } else {
       character.teleport(0, 0, 0);
     }
@@ -65,6 +94,7 @@ async function init() {
       const steps = 60;
       const dt = t / steps;
       for (let i = 0; i < steps; i++) {
+        physics.update(dt);
         character.update(dt);
         river.update(i * dt);
       }
@@ -75,6 +105,8 @@ async function init() {
 
   const clock = new THREE.Clock();
 
+  let hasTriggeredRockslide = false;
+
   function animate() {
     if (!shotMode) {
       requestAnimationFrame(animate);
@@ -84,9 +116,20 @@ async function init() {
     const time = clock.getElapsedTime();
 
     if (!shotMode) {
+      physics.update(dt);
       character.update(dt);
       river.update(time);
       decor.update(camera);
+
+      // Check distance to rockslide trigger zone (approx x: 100, z: 0)
+      if (!hasTriggeredRockslide) {
+         const distSq = (character.mesh.position.x - 100)**2 + (character.mesh.position.z)**2;
+         if (distSq < 400) { // 20 units radius
+            hasTriggeredRockslide = true;
+            physics.spawnRockslide(scene, 150, 0, 200);
+            console.log("Rockslide triggered!");
+         }
+      }
     }
 
     renderer.render(scene, camera);

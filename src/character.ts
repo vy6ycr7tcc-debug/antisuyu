@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { InputManager } from './input.js';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { physics } from './physics.js';
 
 export enum MovementState {
   WALK = 'WALK',
@@ -164,9 +166,24 @@ export class CharacterController {
     }
   }
 
+  // Optional rigid body reference for physics interaction
+  public body: RAPIER.RigidBody | null = null;
+  public collider: RAPIER.Collider | null = null;
+
   public update(dt: number) {
     this.stateTimer += dt;
     this.time += dt;
+
+    // Optional sync to physics
+    if (this.body) {
+        // Very basic sync for physics interaction, ideally we'd use a proper KinematicCharacterController
+        // but for now we just want to push things.
+        this.body.setNextKinematicTranslation({
+            x: this.mesh.position.x,
+            y: this.mesh.position.y,
+            z: this.mesh.position.z
+        });
+    }
 
     // Movement Input
     const forward = this.input.isDown('KeyW') ? 1 : (this.input.isDown('KeyS') ? -1 : 0);
@@ -247,9 +264,30 @@ export class CharacterController {
     }
 
     if (this.state !== MovementState.CLIMB && this.state !== MovementState.ROPE_SWING) {
-        this.mesh.position.y = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y;
-        if (this.state === MovementState.SWIM && this.mesh.position.y < -2.5) {
-            this.mesh.position.y = -2.5;
+        let h = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y;
+
+        // Raycast down to find physics colliders (like the rope bridge)
+        const physHeight = physics.raycastDown(this.mesh.position.x, this.mesh.position.y + 2.0, this.mesh.position.z, 5.0);
+        if (physHeight !== null && physHeight > h) {
+            h = physHeight;
+        }
+
+        if (this.state === MovementState.SWIM) {
+             const riverLevel = 0.5; // same as river height
+             // Bob slightly with time
+             const bob = Math.sin(this.time * 2) * 0.1;
+             this.mesh.position.y = riverLevel - 1.5 + bob;
+
+             // Drift slightly with current
+             const driftSpeed = 2.0;
+             this.mesh.position.z -= driftSpeed * dt;
+
+             // Ensure we don't clip through the ground while swimming
+             if (this.mesh.position.y < h) {
+                 this.mesh.position.y = h;
+             }
+        } else {
+             this.mesh.position.y = h;
         }
     }
 
