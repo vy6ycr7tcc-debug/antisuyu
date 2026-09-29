@@ -8,6 +8,7 @@ import { CharacterController } from './character.js';
 import { InputManager } from './input.js';
 import { WebGPURenderer } from 'three/webgpu';
 import { physics } from './physics.js';
+import { initUI, updateUI } from './ui/index.js';
 
 // Setup for global hook
 declare global {
@@ -35,6 +36,8 @@ async function init() {
 
   const input = new InputManager();
   const character = new CharacterController(scene, camera, input);
+
+  initUI(character);
 
   if (physics.world) {
     // Let's add kinematic body to character
@@ -130,6 +133,7 @@ async function init() {
             console.log("Rockslide triggered!");
          }
       }
+      updateUI(dt);
     }
 
     renderer.render(scene, camera);
