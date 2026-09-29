@@ -1,14 +1,19 @@
 const { chromium } = require('playwright');
-const path = require('path');
-const fs = require('fs');
 
 async function run() {
+  const scenarioArg = process.argv[2];
+
   const browser = await chromium.launch({
     headless: true,
-    args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
+    args: [
+      '--enable-unsafe-webgpu',
+      '--enable-features=Vulkan',
+      '--use-gl=angle',
+      '--use-angle=swiftshader'
+    ]
   });
 
-  const scenarios = ['valley_overview', 'river_crossing', 'character_closeup'];
+  const scenarios = scenarioArg ? [scenarioArg] : ['valley_overview', 'river_crossing', 'character_closeup', 'climb_wall', 'rope_swing', 'swim_river'];
   const modes = ['webgpu', 'webgl2'];
 
   for (const mode of modes) {
@@ -16,9 +21,8 @@ async function run() {
       const page = await browser.newPage();
 
       if (mode === 'webgl2') {
-         // Mock navigator.gpu to force fallback
          await page.addInitScript(() => {
-           delete window.navigator.gpu;
+           Object.defineProperty(window.navigator, 'gpu', { value: undefined });
          });
       }
 
@@ -29,10 +33,15 @@ async function run() {
 
       try {
         await page.waitForFunction(() => window.__shotReady === true, { timeout: 10000 });
-        await page.screenshot({ path: `shot_${scenario}_${mode}.png` });
+
+        // Wait a small amount for the frame to be presented
+        await page.waitForTimeout(500);
+
+        const canvas = await page.locator('canvas');
+        await canvas.screenshot({ path: `shot_${scenario}_${mode}.png` });
         console.log(`Saved shot_${scenario}_${mode}.png`);
       } catch (e) {
-        console.error(`Timeout for ${scenario} in ${mode}`);
+        console.error(`Timeout for ${scenario} in ${mode}`, e);
       }
 
       await page.close();

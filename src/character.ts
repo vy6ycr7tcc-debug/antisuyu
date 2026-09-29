@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { InputManager } from './input.js';
 
+export enum MovementState {
+  WALK = 'WALK',
+  CLIMB = 'CLIMB',
+  LEDGE_GRAB = 'LEDGE_GRAB',
+  SWIM = 'SWIM',
+  SLIDE = 'SLIDE',
+  ROPE_SWING = 'ROPE_SWING'
+}
+
+
 export class CharacterController {
   public mesh: THREE.Group;
   private camera: THREE.PerspectiveCamera;
@@ -11,6 +21,10 @@ export class CharacterController {
   private phi: number = Math.PI / 3;
   private radius: number = 5;
   private target: THREE.Vector3 = new THREE.Vector3(0, 1, 0);
+
+  // Traversal State Machine
+  public state: MovementState = MovementState.WALK;
+  private stateTimer: number = 0;
 
   // Locomotion parameters
   private speed: number = 0;
@@ -106,6 +120,8 @@ export class CharacterController {
     this.updateCamera();
   }
 
+  public setForceState(state: MovementState) { this.state = state; this.stateTimer = 0; }
+
   public getTerrainHeightAndNormal(x: number, z: number): { y: number, normal: THREE.Vector3 } {
     const size = 1000;
     const valleyShape = Math.pow(Math.abs(x / (size / 2)), 2) * 100;
@@ -126,7 +142,30 @@ export class CharacterController {
     return { y, normal };
   }
 
+
+  private detectStateTransitions(nextX: number, _nextZ: number, terrainData: { y: number, normal: THREE.Vector3 }) {
+    const isRiver = terrainData.y < -3.0 && Math.abs(nextX) < 15;
+
+    if (this.state === MovementState.WALK && this.mesh.position.y > 10 && terrainData.normal.y < 0.1 && this.input.isDown('KeyW')) {
+        this.state = MovementState.CLIMB;
+    }
+
+    if (this.state === MovementState.WALK && isRiver) {
+        this.state = MovementState.SWIM;
+    } else if (this.state === MovementState.SWIM && !isRiver && terrainData.y > -2.0) {
+        this.state = MovementState.WALK;
+    }
+
+    const slope = 1.0 - terrainData.normal.y;
+    if (this.state === MovementState.WALK && slope > 0.6 && this.speed > 2.0) {
+        this.state = MovementState.SLIDE;
+    } else if (this.state === MovementState.SLIDE && slope < 0.3) {
+        this.state = MovementState.WALK;
+    }
+  }
+
   public update(dt: number) {
+    this.stateTimer += dt;
     this.time += dt;
 
     // Movement Input
@@ -134,7 +173,21 @@ export class CharacterController {
     const right = this.input.isDown('KeyD') ? 1 : (this.input.isDown('KeyA') ? -1 : 0);
     const isRunning = this.input.isDown('ShiftLeft');
 
-    const inputDir = new THREE.Vector3(right, 0, -forward);
+    let actualForward = forward;
+    let actualRight = right;
+
+    if (this.state === MovementState.SLIDE) {
+        actualForward = 1;
+        actualRight = right * 0.5;
+    } else if (this.state === MovementState.CLIMB) {
+        actualForward = forward * 0.5;
+        actualRight = right * 0.5;
+    } else if (this.state === MovementState.SWIM) {
+        actualForward = forward * 0.6;
+        actualRight = right * 0.6;
+    }
+
+    const inputDir = new THREE.Vector3(actualRight, 0, -actualForward);
 
     if (inputDir.lengthSq() > 0) {
       inputDir.normalize();
@@ -173,25 +226,63 @@ export class CharacterController {
 
     const terrainData = this.getTerrainHeightAndNormal(nextX, nextZ);
 
+
+    this.detectStateTransitions(nextX, nextZ, terrainData);
+
     const slope = 1.0 - terrainData.normal.y;
-    if (slope < 0.4) {
+
+    if (this.state === MovementState.CLIMB) {
+        this.mesh.position.y += actualForward * this.maxWalkSpeed * 0.5 * dt;
+        this.mesh.position.x = nextX;
+        this.mesh.position.z = nextZ;
+    } else if (this.state === MovementState.ROPE_SWING) {
+        const swingSpeed = 2.0;
+        const swingArc = Math.sin(this.stateTimer * swingSpeed) * 3;
+        this.mesh.position.y = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y + 5 - Math.cos(this.stateTimer * swingSpeed) * 2;
+        this.mesh.position.x += Math.cos(this.mesh.rotation.y) * swingArc * dt;
+        this.mesh.position.z += Math.sin(this.mesh.rotation.y) * swingArc * dt;
+    } else if (slope < 0.4 || this.state === MovementState.SLIDE || this.state === MovementState.SWIM) {
       this.mesh.position.x = nextX;
       this.mesh.position.z = nextZ;
     }
 
-    this.mesh.position.y = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y;
+    if (this.state !== MovementState.CLIMB && this.state !== MovementState.ROPE_SWING) {
+        this.mesh.position.y = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y;
+        if (this.state === MovementState.SWIM && this.mesh.position.y < -2.5) {
+            this.mesh.position.y = -2.5;
+        }
+    }
+
 
     if (this.speed > 0.1) {
-      const cycleSpeed = isRunning ? 15 : 8;
+
+      let cycleSpeed = isRunning ? 15 : 8;
+      if (this.state === MovementState.SWIM) cycleSpeed = 5;
+      if (this.state === MovementState.CLIMB) cycleSpeed = 4;
       const cycle = Math.sin(this.time * cycleSpeed);
 
       this.leftLeg.rotation.x = cycle * 0.8;
       this.rightLeg.rotation.x = -cycle * 0.8;
 
-      this.leftArm.rotation.x = -cycle * 0.5;
-      this.rightArm.rotation.x = cycle * 0.5;
+      if (this.state === MovementState.CLIMB) {
+          this.leftArm.rotation.x = Math.PI - cycle * 0.5;
+          this.rightArm.rotation.x = Math.PI + cycle * 0.5;
+      } else if (this.state === MovementState.SWIM) {
+          this.leftArm.rotation.z = Math.PI / 2 + cycle * 0.5;
+          this.rightArm.rotation.z = -Math.PI / 2 - cycle * 0.5;
+      } else {
+          this.leftArm.rotation.x = -cycle * 0.5;
+          this.rightArm.rotation.x = cycle * 0.5;
+      }
 
       this.torso.position.y = 1.0 + Math.abs(cycle) * 0.05;
+
+      if (this.state === MovementState.SLIDE) {
+          this.mesh.rotation.x = Math.PI / 6;
+      } else {
+          this.mesh.rotation.x = 0;
+      }
+
     } else {
       const breathe = Math.sin(this.time * 2);
       this.torso.scale.set(1, 1 + breathe * 0.02, 1 + breathe * 0.05);
