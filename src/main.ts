@@ -105,7 +105,9 @@ async function init() {
     if (renderer instanceof WebGPURenderer) {
       await renderer.renderAsync(scene, camera);
     }
-    window.__shotReady = true;
+    setTimeout(() => {
+      window.__shotReady = true;
+    }, 100);
   } else {
     animate();
   }

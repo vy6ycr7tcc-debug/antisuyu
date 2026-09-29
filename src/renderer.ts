@@ -33,9 +33,9 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.5;
 
     return { renderer, quality };
   } catch (e) {
@@ -48,9 +48,9 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     renderer.setPixelRatio(fallbackQuality.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.5;
 
     return { renderer, quality: fallbackQuality };
   }

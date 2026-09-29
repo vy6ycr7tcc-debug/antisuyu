@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 export function createTerrain(scene: THREE.Scene) {
-  // We use a simplified heightmap approach for the procedural valley (~1 km^2).
   const size = 1000;
   const segments = 256;
 
@@ -10,19 +9,15 @@ export function createTerrain(scene: THREE.Scene) {
 
   const position = geometry.attributes.position;
 
-  // Basic procedural height generation (using simple sine waves as a placeholder for noise)
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i);
     const z = position.getZ(i);
 
-    // Create a valley shape
     const valleyShape = Math.pow(Math.abs(x / (size / 2)), 2) * 100;
 
-    // Add some noise
     const noise = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5 +
                   Math.sin(x * 0.01 + z * 0.02) * 15;
 
-    // Add river bed depression in the middle
     const riverBed = -Math.exp(-Math.pow(x / 30, 2)) * 10;
 
     position.setY(i, valleyShape + noise + riverBed);
@@ -30,11 +25,6 @@ export function createTerrain(scene: THREE.Scene) {
 
   geometry.computeVertexNormals();
 
-  // Create a splat-mapped PBR material.
-  // For the initial vertical slice, we'll use a single material with varied color via vertex colors
-  // or just a solid color if we don't have textures.
-
-  // Let's create procedural colors based on height and slope
   const colors = [];
   const color = new THREE.Color();
   const up = new THREE.Vector3(0, 1, 0);
@@ -46,15 +36,15 @@ export function createTerrain(scene: THREE.Scene) {
     normal.fromBufferAttribute(geometry.attributes.normal as THREE.BufferAttribute, i);
     const slope = 1.0 - normal.dot(up);
 
-    if (slope > 0.3) {
+    if (slope > 0.4) {
       // Rock/Scree
-      color.setHex(0x555555).lerp(new THREE.Color(0x333333), Math.random());
-    } else if (y < 2) {
-      // Mud near river
-      color.setHex(0x3d2817);
+      color.setHex(0x404040).lerp(new THREE.Color(0x2a2a2a), Math.random());
+    } else if (y < 3) {
+      // River edge mud
+      color.setHex(0x382a1d).lerp(new THREE.Color(0x281e14), Math.random());
     } else {
-      // Grass
-      color.setHex(0x4a5d23).lerp(new THREE.Color(0x3a4d13), Math.random() * 0.5);
+      // Lush cloud forest greenery
+      color.setHex(0x294218).lerp(new THREE.Color(0x3e5e26), Math.random());
     }
 
     colors.push(color.r, color.g, color.b);
@@ -64,8 +54,9 @@ export function createTerrain(scene: THREE.Scene) {
 
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
-    roughness: 0.8,
-    metalness: 0.1,
+    roughness: 0.85,
+    metalness: 0.05,
+    envMapIntensity: 1.0
   });
 
   const terrain = new THREE.Mesh(geometry, material);
