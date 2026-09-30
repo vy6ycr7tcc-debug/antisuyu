@@ -1,0 +1,23 @@
+{
+  "name": "Juzu",
+  "short_name": "Juzu",
+  "description": "A realistic WebGPU open-world adventure set in the Andes.",
+  "start_url": "/juzu/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

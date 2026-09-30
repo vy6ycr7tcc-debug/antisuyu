@@ -1,3 +1,4 @@
+import { registerServiceWorker, mountOfflineUI } from "./pwa/offline.js";
 import * as THREE from 'three';
 import { createRenderer, getRenderCaps, QUALITY_TIERS } from './renderer.js';
 import { setupEnvironment } from './environment.js';
@@ -214,6 +215,10 @@ async function init() {
   const touchControls = new TouchControls(input);
 
   const character = new CharacterController(scene, camera, input);
+
+  // PWA/offline boot block
+  registerServiceWorker();
+  mountOfflineUI();
 
   initUI(character);
 
@@ -508,11 +513,7 @@ async function init() {
       dustParticles.update(camera.position, 'dust');
       leavesParticles.update(camera.position, 'leaves');
       snowParticles.update(camera.position, 'snow');
-      let activeRegionId = regionManager.currentRegionId;
-      if (shotMode && shot && shot.startsWith('region:')) {
-          activeRegionId = shot.replace('region:', '');
-      }
-      volumetrics.update(camera.position, activeRegionId, todParam);
+      volumetrics.update(camera.position);
 
       // Check distance to rockslide trigger zone (approx x: 100, z: 0)
       if (!hasTriggeredRockslide) {
