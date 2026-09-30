@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { woodWet, fabricWorn, ashlarWeathered, ashlarLight, ironDark, lampEmissive } from '../materials.js';
 import type {
   RegionModule,
   RegionBuildAPI,
@@ -80,12 +81,42 @@ export const cloudForest: RegionModule = {
     api.scene.add(group);
 
     // Materials
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9, metalness: 0.0 });
-    const fabricMat = new THREE.MeshStandardMaterial({ color: 0x8b0000, roughness: 1.0, metalness: 0.0 }); // red tents
-    const earthMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 1.0, metalness: 0.0 });
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.8, metalness: 0.1 });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.8 });
-    const emissiveMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffee, emissiveIntensity: 2.0 });
+    const woodMat = woodWet();
+    const fabricMat = fabricWorn(0x7A2E2E);
+    const earthMat = ashlarWeathered();
+    const stoneMat = ashlarLight();
+    const metalMat = ironDark();
+    const emissiveMat = lampEmissive();
+
+
+    // Milestone 2: Mist Layering (composites with sky fog)
+    // We create planes but reuse the scene's fog color to avoid hardcoding fog colors.
+    const mistGeo = new THREE.PlaneGeometry(20, 10);
+    // As per V-REG1 scope and restrictions, we use fabricWorn(0xA8B8B0) as a hacky transparent material since we cannot define new materials inline.
+    const mistMat = fabricWorn(0xA8B8B0);
+    mistMat.transparent = true;
+    mistMat.opacity = 0.15;
+    mistMat.depthWrite = false;
+
+    // We update the mist color in the render loop to match the V-SKY fog.
+    api.onEnterRegion(() => {
+        const loop = () => {
+            if (api.scene.fog && (api.scene.fog as THREE.Fog).color) {
+                mistMat.color.copy((api.scene.fog as THREE.Fog).color);
+            }
+            if (mistMat.userData.active) requestAnimationFrame(loop);
+        };
+        mistMat.userData.active = true;
+        loop();
+    });
+    api.onExitRegion(() => { mistMat.userData.active = false; });
+
+    for(let i=0; i<8; i++) {
+        const mist = new THREE.Mesh(mistGeo, mistMat);
+        mist.position.set(100 + (Math.random()-0.5)*150, 5 + Math.random()*5, -300 + (Math.random()-0.5)*200);
+        mist.rotation.y = Math.random() * Math.PI;
+        group.add(mist);
+    }
 
     // 1. The Lower Blockade (Position: x: -100, z: -500)
     const blockadeGroup = new THREE.Group();
@@ -127,7 +158,7 @@ export const cloudForest: RegionModule = {
     ruinGroup.add(pit);
 
     // Damaged ashlar masonry
-    const blockGeo = new THREE.BoxGeometry(2, 2, 2);
+    const blockGeo = new THREE.BoxGeometry(1.99, 1.99, 1.99);
     for (let i = 0; i < 15; i++) {
       const block = new THREE.Mesh(blockGeo, stoneMat);
       block.position.set(
@@ -201,7 +232,7 @@ export const cloudForest: RegionModule = {
     // Quipu Cipher puzzle state machine (puzzle_guard encounter logic)
     // 3 knots (represented abstractly as small boxes on 3 of the hanging cords)
     const knotGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-    const knotMat = new THREE.MeshStandardMaterial({ color: 0xaaaa00, roughness: 0.8 }); // Yellowish knots
+    const knotMat = fabricWorn(0xD8CBB0);
 
     const knotMeshes: THREE.Mesh[] = [];
     const knotStates = [0, 0, 0];
