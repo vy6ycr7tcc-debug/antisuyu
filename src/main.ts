@@ -439,6 +439,9 @@ async function init() {
       character.teleport(0, 0, Math.PI / 2);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
+      character.disableCameraUpdate = true;
+      camera.position.set(50, character.mesh.position.y + 1.5, character.mesh.position.z + 2);
+      camera.lookAt(50, character.mesh.position.y + 1.0, character.mesh.position.z);
     } else if (shot === 'rockslide') {
       const startX = 200;
       const startZ = 0;
