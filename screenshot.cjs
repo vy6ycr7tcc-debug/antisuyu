@@ -21,9 +21,7 @@ async function run() {
       const page = await browser.newPage();
 
       if (mode === 'webgl2') {
-         await page.addInitScript(() => {
-           Object.defineProperty(window.navigator, 'gpu', { value: undefined });
-         });
+         await page.addInitScript(`Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });`);
       }
 
       page.on('console', msg => console.log(`[${mode}] ${msg.type()}: ${msg.text()}`));
