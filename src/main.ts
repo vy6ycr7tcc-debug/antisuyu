@@ -6,6 +6,7 @@ import { createRiver } from './river.js';
 import { createDecor } from './decor.js';
 import { CharacterController } from './character.js';
 import { InputManager } from './input.js';
+import { TouchControls } from './touch/controls.js';
 import { WebGPURenderer } from 'three/webgpu';
 import { physics } from './physics.js';
 import { initUI, updateUI } from './ui/index.js';
@@ -50,6 +51,10 @@ async function init() {
   const volumetrics = new VolumetricLightShafts(scene, todParam);
 
   const input = new InputManager();
+
+  // touch controls block
+  const touchControls = new TouchControls(input);
+
   const character = new CharacterController(scene, camera, input);
 
   initUI(character);
@@ -331,6 +336,7 @@ async function init() {
     }
 
     if (!shotMode) {
+      touchControls.update(dt);
       physics.update(dt);
       character.update(dt);
       terrainManager.update(character.mesh.position);
