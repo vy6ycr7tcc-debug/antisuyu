@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { InputManager } from './input.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { physics } from './physics.js';
+import { getGlobalTerrainHeight } from './terrain.js';
 
 export enum MovementState {
   WALK = 'WALK',
@@ -125,21 +126,12 @@ export class CharacterController {
   public setForceState(state: MovementState) { this.state = state; this.stateTimer = 0; }
 
   public getTerrainHeightAndNormal(x: number, z: number): { y: number, normal: THREE.Vector3 } {
-    const size = 1000;
-    const valleyShape = Math.pow(Math.abs(x / (size / 2)), 2) * 100;
-    const noise = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5 +
-                  Math.sin(x * 0.01 + z * 0.02) * 15;
-    const riverBed = -Math.exp(-Math.pow(x / 30, 2)) * 10;
-
-    const y = valleyShape + noise + riverBed;
-
+    const y = getGlobalTerrainHeight(x, z);
     const eps = 0.1;
-    const hx = (Math.pow(Math.abs((x+eps) / (size / 2)), 2) * 100 + Math.sin((x+eps) * 0.05) * Math.cos(z * 0.05) * 5 + Math.sin((x+eps) * 0.01 + z * 0.02) * 15 - Math.exp(-Math.pow((x+eps) / 30, 2)) * 10);
-    const hz = (Math.pow(Math.abs(x / (size / 2)), 2) * 100 + Math.sin(x * 0.05) * Math.cos((z+eps) * 0.05) * 5 + Math.sin(x * 0.01 + (z+eps) * 0.02) * 15 - Math.exp(-Math.pow(x / 30, 2)) * 10);
-
+    const hx = getGlobalTerrainHeight(x + eps, z);
+    const hz = getGlobalTerrainHeight(x, z + eps);
     const dx = hx - y;
     const dz = hz - y;
-
     const normal = new THREE.Vector3(-dx, eps, -dz).normalize();
     return { y, normal };
   }
@@ -169,6 +161,9 @@ export class CharacterController {
   // Optional rigid body reference for physics interaction
   public body: RAPIER.RigidBody | null = null;
   public collider: RAPIER.Collider | null = null;
+
+  // Breath particles
+  private breathParticles: THREE.Mesh[] = [];
 
   public update(dt: number) {
     this.stateTimer += dt;
@@ -291,6 +286,37 @@ export class CharacterController {
         }
     }
 
+
+    // Breath vapor effect for high sierra
+    const isHighSierra = this.mesh.position.z > 500 || this.mesh.position.y > 50;
+    if (isHighSierra) {
+      if (Math.random() < 0.1) { // spawn rate
+         const breathGeo = new THREE.SphereGeometry(0.1, 4, 4);
+         const breathMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
+         const breath = new THREE.Mesh(breathGeo, breathMat);
+         // Position roughly at head
+         breath.position.copy(this.mesh.position).add(new THREE.Vector3(0, 1.8, 0.5).applyAxisAngle(new THREE.Vector3(0,1,0), this.mesh.rotation.y));
+         this.mesh.parent?.add(breath);
+         this.breathParticles.push(breath);
+      }
+    }
+
+    // Update breath particles
+    for (let i = this.breathParticles.length - 1; i >= 0; i--) {
+        const p = this.breathParticles[i];
+        p.position.y += dt * 1.5;
+        p.position.z += dt * 0.5 * Math.cos(this.mesh.rotation.y); // drift forward slightly
+        p.position.x += dt * 0.5 * Math.sin(this.mesh.rotation.y);
+        const mat = p.material as THREE.MeshBasicMaterial;
+        mat.opacity -= dt * 0.5;
+        p.scale.addScalar(dt * 2.0);
+        if (mat.opacity <= 0) {
+            p.parent?.remove(p);
+            p.geometry.dispose();
+            mat.dispose();
+            this.breathParticles.splice(i, 1);
+        }
+    }
 
     if (this.speed > 0.1) {
 

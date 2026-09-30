@@ -1,0 +1,10 @@
+
+> app@1.0.0 dev
+> vite
+
+
+  VITE v8.3.1  ready in 351 ms
+
+  ➜  Local:   http://localhost:5173/antisuyu/
+  ➜  Network: use --host to expose
+11:44:48 PM [vite] (client) [optimizer] bundling dependencies...
