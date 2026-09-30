@@ -69,11 +69,11 @@ export const cloudForest: RegionModule = {
     { flag: 'q_act1_quipu_solved', trigger: 'Solving the quipu cipher' }
   ],
   shots: [
-    { id: 'cf_lower_blockade', camera: { x: -80, y: 15, z: -480 }, lookAt: { x: -100, y: 0, z: -500 } },
-    { id: 'cf_excavated_ruin', camera: { x: 180, y: 20, z: -270 }, lookAt: { x: 150, y: 0, z: -300 } },
-    { id: 'cf_quipu_archive', camera: { x: 150, y: -15, z: -340 }, lookAt: { x: 150, y: -20, z: -350 } },
-    { id: 'cf_cliff_staircase', camera: { x: 200, y: 5, z: 60 }, lookAt: { x: 200, y: 10, z: 80 } },
-    { id: 'cf_overview', camera: { x: 0, y: 150, z: -100 }, lookAt: { x: 150, y: 0, z: -300 } }
+    { id: 'cf_lower_blockade', camera: { x: -80, y: 27, z: -480 }, lookAt: { x: -100, y: 31, z: -500 } },
+    { id: 'cf_excavated_ruin', camera: { x: 180, y: 56, z: -270 }, lookAt: { x: 150, y: 50, z: -300 } },
+    { id: 'cf_quipu_archive', camera: { x: 150, y: 39, z: -340 }, lookAt: { x: 150, y: 36, z: -350 } },
+    { id: 'cf_cliff_staircase', camera: { x: 200, y: 69, z: 60 }, lookAt: { x: 200, y: 62, z: 80 } },
+    { id: 'cf_overview', camera: { x: 0, y: 161, z: -100 }, lookAt: { x: 150, y: 36, z: -300 } }
   ],
   build(api: RegionBuildAPI): void {
     const group = new THREE.Group();

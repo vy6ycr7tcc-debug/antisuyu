@@ -91,12 +91,12 @@ export const highSierra: RegionModule = {
         { flag: 'q_act2_outpost_confrontation', trigger: 'entering the outpost inner perimeter' }
     ],
     shots: <RegionShotDef[]>[
-        { id: 'hs_qenko_marker', camera: { x: 100, y: 10, z: 580 }, lookAt: { x: 100, y: 0, z: 600 } },
-        { id: 'hs_chakana_gate', camera: { x: -150, y: 15, z: 720 }, lookAt: { x: -150, y: 5, z: 750 } },
-        { id: 'hs_sayhuite_table', camera: { x: 200, y: 20, z: 870 }, lookAt: { x: 200, y: 5, z: 900 } },
-        { id: 'hs_outpost', camera: { x: 0, y: 20, z: 1000 }, lookAt: { x: 0, y: 5, z: 1050 } },
-        { id: 'hs_paqarina_descent', camera: { x: -50, y: 15, z: 1110 }, lookAt: { x: -50, y: 5, z: 1150 } },
-        { id: 'hs_overview', camera: { x: 0, y: 150, z: 600 }, lookAt: { x: 0, y: 0, z: 800 } }
+        { id: 'hs_qenko_marker', camera: { x: 100, y: 15, z: 580 }, lookAt: { x: 100, y: 5, z: 600 } },
+        { id: 'hs_chakana_gate', camera: { x: -150, y: 20, z: 720 }, lookAt: { x: -150, y: 10, z: 750 } },
+        { id: 'hs_sayhuite_table', camera: { x: 200, y: 67, z: 870 }, lookAt: { x: 200, y: 52, z: 900 } },
+        { id: 'hs_outpost', camera: { x: 0, y: 31, z: 1000 }, lookAt: { x: 0, y: 16, z: 1050 } },
+        { id: 'hs_paqarina_descent', camera: { x: -50, y: 20, z: 1110 }, lookAt: { x: -50, y: 10, z: 1150 } },
+        { id: 'hs_overview', camera: { x: 0, y: 158, z: 600 }, lookAt: { x: 0, y: 8, z: 800 } }
     ],
     build(api: RegionBuildAPI): void {
         const _flags: QuestFlagAPI = api.flags;

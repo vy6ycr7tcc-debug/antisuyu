@@ -73,11 +73,11 @@ export const jungleLowlands: RegionModule = {
     { flag: 'q_act3_vanguard_secured', trigger: 'Reaching the choke-point barricade and triggering the holdout' }
   ],
   shots: [
-    { id: 'jl_serpents_path', camera: { x: 100, y: 15, z: -760 }, lookAt: { x: 100, y: 0, z: -800 } },
-    { id: 'jl_trembling_tunnels', camera: { x: -150, y: 10, z: -960 }, lookAt: { x: -150, y: 0, z: -1000 } },
-    { id: 'jl_vanguard_choke', camera: { x: 250, y: 10, z: -1100 }, lookAt: { x: 250, y: 0, z: -1150 } },
-    { id: 'jl_submerged_passage', camera: { x: 0, y: 20, z: -1300 }, lookAt: { x: 0, y: 0, z: -1350 } },
-    { id: 'jl_overview', camera: { x: 50, y: 100, z: -1000 }, lookAt: { x: 0, y: 0, z: -1000 } }
+    { id: 'jl_serpents_path', camera: { x: 100, y: 37, z: -760 }, lookAt: { x: 100, y: 22, z: -800 } },
+    { id: 'jl_trembling_tunnels', camera: { x: -150, y: 19, z: -960 }, lookAt: { x: -150, y: 9, z: -1000 } },
+    { id: 'jl_vanguard_choke', camera: { x: 250, y: 56, z: -1100 }, lookAt: { x: 250, y: 46, z: -1150 } },
+    { id: 'jl_submerged_passage', camera: { x: 0, y: 25, z: -1300 }, lookAt: { x: 0, y: 5, z: -1350 } },
+    { id: 'jl_overview', camera: { x: 50, y: 113, z: -1000 }, lookAt: { x: 0, y: 13, z: -1000 } }
   ],
   build(api: RegionBuildAPI): void {
     const group = new THREE.Group();

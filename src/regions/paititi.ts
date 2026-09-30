@@ -70,11 +70,11 @@ export const paititi: RegionModule = {
     { flag: 'q_act4_observatory_aligned', trigger: 'pa_grand_observatory' }
   ],
   shots: [
-    { id: 'pa_overview', camera: { x: 1000, y: 150, z: -200 }, lookAt: { x: 1100, y: 0, z: -50 } },
-    { id: 'pa_outer_terraces', camera: { x: 800, y: 50, z: -100 }, lookAt: { x: 900, y: 0, z: -100 } },
-    { id: 'pa_plaza_of_sun', camera: { x: 1050, y: 20, z: -50 }, lookAt: { x: 1100, y: 10, z: -50 } },
-    { id: 'pa_sanctuary', camera: { x: 1250, y: 20, z: 50 }, lookAt: { x: 1300, y: 15, z: 50 } },
-    { id: 'pa_aqueduct_line', camera: { x: 1150, y: 20, z: 0 }, lookAt: { x: 1200, y: 10, z: 0 } }
+    { id: 'pa_overview', camera: { x: 1000, y: 1534, z: -200 }, lookAt: { x: 1100, y: 1384, z: -50 } },
+    { id: 'pa_outer_terraces', camera: { x: 800, y: 966, z: -100 }, lookAt: { x: 900, y: 916, z: -100 } },
+    { id: 'pa_plaza_of_sun', camera: { x: 1050, y: 1404, z: -50 }, lookAt: { x: 1100, y: 1394, z: -50 } },
+    { id: 'pa_sanctuary', camera: { x: 1250, y: 1914, z: 50 }, lookAt: { x: 1300, y: 1909, z: 50 } },
+    { id: 'pa_aqueduct_line', camera: { x: 1150, y: 1655, z: 0 }, lookAt: { x: 1200, y: 1645, z: 0 } }
   ],
   build(api: RegionBuildAPI) {
     const paititiGroup = new THREE.Group();
