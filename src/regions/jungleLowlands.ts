@@ -1,15 +1,13 @@
 import * as THREE from 'three';
-// @ts-ignore
-import { limestoneSwallowed, woodAged, ashlarWeathered, lampEmissive, poolStill, channelClear } from '../materials.js';
-// @ts-ignore
+import { limestoneSwallowed, woodAged, ashlarWeathered, lampEmissive, type RenderCaps } from '../materials.js';
+import { createWaterSurface } from '../river.js';
 import type { RegionModule, RegionBuildAPI, POIDef, EncounterDef, QuestStageDef, RegionShotDef } from '../world/contracts.js';
-// @ts-ignore
 import type { QuestFlagAPI } from '../save/questFlags.js';
 
 export const jungleLowlands: RegionModule = {
   id: 'jungle_lowlands',
   displayName: 'The Jungle Lowlands',
-  bounds: { min: { x: -450, y: -80, z: -1400 }, max: { x: 450, y: 120, z: -700 } },
+  bounds: { min: { x: -450, y: -80, z: -1400 }, max: { x: 450, y: 120, z: -701 } },
   pois: [
     {
       id: 'jl_serpents_path',
@@ -90,19 +88,21 @@ export const jungleLowlands: RegionModule = {
     const rockMat = limestoneSwallowed();
     const woodMat = woodAged();
 
-    const waterMat = poolStill();
-    waterMat.color.setHex(0x14261E); // dark water per region script
-
     const emissiveFungusMat = lampEmissive();
     emissiveFungusMat.color.setHex(0x7FB069);
     emissiveFungusMat.emissive.setHex(0x7FB069);
     emissiveFungusMat.emissiveIntensity = 0.35;
 
     const emissiveSpiralMat = ashlarWeathered();
+    emissiveSpiralMat.color.setHex(0xC9A86A);
     const barricadeStoneMat = ashlarWeathered();
+    barricadeStoneMat.color.setHex(0xB8B0A0);
 
-    const darkWaterMat = poolStill();
-    darkWaterMat.color.setHex(0x14261E);
+    const caps: RenderCaps = {
+      isWebGPU: typeof navigator !== 'undefined' && !!(navigator as unknown as { gpu?: unknown }).gpu,
+      tier: 'MEDIUM',
+      maxAnisotropy: 4
+    };
 
     // --- 1. The Serpent's Path (Flooded Caverns) ---
     const serpentsPathGroup = new THREE.Group();
@@ -127,9 +127,14 @@ export const jungleLowlands: RegionModule = {
     serpentsPathGroup.add(carving);
 
     // Flooded section water plane
-    const spWaterGeo = new THREE.PlaneGeometry(40, 60);
-    const spWater = new THREE.Mesh(spWaterGeo, waterMat);
-    spWater.rotation.x = -Math.PI / 2;
+    const spWaterSurface = createWaterSurface(
+      api.scene,
+      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: false },
+      40,
+      60,
+      caps
+    );
+    const spWater = spWaterSurface.mesh;
     spWater.position.set(0, 0, -20); 
     serpentsPathGroup.add(spWater);
 
@@ -243,9 +248,14 @@ export const jungleLowlands: RegionModule = {
     submergedGroup.add(throat);
 
     // Dark water plane
-    const dWaterGeo = new THREE.PlaneGeometry(30, 40);
-    const dWater = new THREE.Mesh(dWaterGeo, darkWaterMat);
-    dWater.rotation.x = -Math.PI / 2;
+    const dWaterSurface = createWaterSurface(
+      api.scene,
+      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: false },
+      30,
+      40,
+      caps
+    );
+    const dWater = dWaterSurface.mesh;
     dWater.position.set(0, -2, -10);
     submergedGroup.add(dWater);
 
