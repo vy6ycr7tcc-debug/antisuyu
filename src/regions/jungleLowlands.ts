@@ -2,7 +2,7 @@ import * as THREE from 'three';
 // @ts-ignore
 import { limestoneSwallowed, woodAged, ashlarWeathered, lampEmissive, poolStill, channelClear } from '../materials.js';
 // @ts-ignore
-import type { RegionModule, RegionBuildAPI } from '../world/contracts.js';
+import type { RegionModule, RegionBuildAPI, POIDef, EncounterDef, QuestStageDef, RegionShotDef } from '../world/contracts.js';
 // @ts-ignore
 import type { QuestFlagAPI } from '../save/questFlags.js';
 

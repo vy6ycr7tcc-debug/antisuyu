@@ -2,9 +2,15 @@ import * as THREE from 'three';
 // @ts-ignore
 import type { 
     RegionModule, 
-    RegionBuildAPI
+    RegionBuildAPI,
+    POIDef,
+    EncounterDef,
+    QuestStageDef,
+    RegionShotDef,
+    Vec3
 } from '../world/contracts.js';
-
+// @ts-ignore
+import type { QuestFlagAPI } from '../save/questFlags.js';
 
 export const highSierra: RegionModule = {
     id: 'high_sierra',
