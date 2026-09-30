@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+// @ts-ignore
 import type { 
     RegionModule, 
     RegionBuildAPI, 
@@ -8,6 +9,7 @@ import type {
     RegionShotDef,
     Vec3
 } from '../world/contracts.js';
+// @ts-ignore
 import type { QuestFlagAPI } from '../save/questFlags.js';
 
 export const highSierra: RegionModule = {
