@@ -46,6 +46,8 @@ export class CharacterController {
   private leftLeg: THREE.Mesh;
   private rightLeg: THREE.Mesh;
 
+  public disableCameraUpdate: boolean = false;
+
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, input: InputManager) {
     this.camera = camera;
     this.input = input;
@@ -394,6 +396,7 @@ export class CharacterController {
   }
 
   public updateCamera() {
+    if (this.disableCameraUpdate) return;
     this.target.copy(this.mesh.position).add(new THREE.Vector3(0, 1.2, 0));
 
     const x = this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta);

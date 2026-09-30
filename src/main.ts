@@ -421,9 +421,10 @@ async function init() {
       for (const region of REGIONS) {
         const s = region.shots.find(x => x.id === shotId);
         if (s) {
+          character.disableCameraUpdate = true;
+          character.mesh.visible = false;
           camera.position.set(s.camera.x, s.camera.y, s.camera.z);
           camera.lookAt(s.lookAt.x, s.lookAt.y, s.lookAt.z);
-          character.teleport(0, -1000, 0); // Hide character out of frame
           found = true;
           break;
         }
