@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import type { RegionModule, RegionBuildAPI, POIDef, EncounterDef, QuestStageDef, RegionShotDef } from '../world/contracts.js';
-import type { QuestFlagAPI } from '../save/questFlags.js';
+import type { RegionModule, RegionBuildAPI } from '../world/contracts.js';
 
 export const jungleLowlands: RegionModule = {
   id: 'jungle_lowlands',
