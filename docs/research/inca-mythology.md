@@ -101,7 +101,7 @@ There are **three competing origin legends**, and the sources themselves explain
 - The golden staff that sinks only in the right place is a dowsing-rod quest item — Naira must carry a replica (or the original) and find where it "wants" to sink; Sol Negro has a forgery that sinks everywhere, a nice tell.
 - The three windows = a triple-gated dungeon: each sibling-band's window holds a trial; the sealed cave of Ayar Cachi is a tomb level (the brother walled up alive, still "angry").
 - Manco's never-found stone mummy is the ultimate MacGuffin alternative to Paititi: the holiest huaca the Spanish never destroyed, still dressed and waiting. Finding it could be the game's true ending.
-- Legend B's disputed status is a meta-plot device: a 1609 manuscript (Garcilaso) that may be fabrication — Naira must decide whether to trust a colonial text or the archaeology. 
+- Legend B's disputed status is a meta-plot device: a 1609 manuscript (Garcilaso) that may be fabrication — Naira must decide whether to trust a colonial text or the archaeology.
 
 ---
 
