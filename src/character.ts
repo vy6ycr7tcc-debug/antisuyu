@@ -49,52 +49,108 @@ export class CharacterController {
     this.camera = camera;
     this.input = input;
 
-    // Create a proportioned realistic humanoid placeholder
+    // Realistic proportions and anatomy for Naira
     this.mesh = new THREE.Group();
 
-    const mat = new THREE.MeshStandardMaterial({ color: 0x886655, roughness: 0.7 });
+    // Skin with subsurface scattering approximation
+    const skinMat = new THREE.MeshPhysicalMaterial({
+        color: 0x8d5524,
+        roughness: 0.4,
+        metalness: 0.0,
+        transmission: 0.1, // Fake SSS via transmission/thickness
+        thickness: 0.5,
+        clearcoat: 0.1
+    });
 
-    // Torso (~0.6m)
-    const torsoGeo = new THREE.BoxGeometry(0.4, 0.6, 0.2);
-    this.torso = new THREE.Mesh(torsoGeo, mat);
+    // Cloth PBR (weather-worn field clothing)
+    const clothMat = new THREE.MeshPhysicalMaterial({
+        color: 0x4a5d23, // Muted field green
+        roughness: 0.9,
+        metalness: 0.0,
+        clearcoat: 0.0
+    });
+
+    // Pants (tough fabric)
+    const pantsMat = new THREE.MeshPhysicalMaterial({
+        color: 0x3d2c23, // Dark brown
+        roughness: 0.95,
+        metalness: 0.0
+    });
+
+    // Gear (leather/straps)
+    const gearMat = new THREE.MeshPhysicalMaterial({
+        color: 0x2c1a10, // Dark leather
+        roughness: 0.6,
+        metalness: 0.1,
+        clearcoat: 0.2
+    });
+
+    // Torso (Jacket/Shirt)
+    const torsoGeo = new THREE.CylinderGeometry(0.22, 0.18, 0.6, 16);
+    this.torso = new THREE.Mesh(torsoGeo, clothMat);
     this.torso.position.y = 1.0;
     this.torso.castShadow = true;
     this.mesh.add(this.torso);
 
-    // Head (~0.25m)
-    const headGeo = new THREE.SphereGeometry(0.12);
-    const head = new THREE.Mesh(headGeo, mat);
+    // Pack/Field Gear
+    const packGeo = new THREE.BoxGeometry(0.3, 0.4, 0.15);
+    const pack = new THREE.Mesh(packGeo, gearMat);
+    pack.position.set(0, 0.1, -0.15);
+    this.torso.add(pack);
+
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.11, 16, 16);
+    const head = new THREE.Mesh(headGeo, skinMat);
     head.position.y = 1.45;
     head.castShadow = true;
+
+    // Dark braid (tube geometry)
+    const braidPath = new THREE.CatmullRomCurve3([
+       new THREE.Vector3(0, 0, -0.1),
+       new THREE.Vector3(0, -0.1, -0.15),
+       new THREE.Vector3(0, -0.3, -0.18)
+    ]);
+    const braidGeo = new THREE.TubeGeometry(braidPath, 8, 0.03, 8, false);
+    const hairMat = new THREE.MeshPhysicalMaterial({
+        color: 0x0a0a0a,
+        roughness: 0.4,
+        metalness: 0.1,
+        clearcoat: 0.3 // Shiny hair response
+    });
+    const braid = new THREE.Mesh(braidGeo, hairMat);
+    head.add(braid);
+
     this.mesh.add(head);
 
     // Legs (~0.8m)
-    const legGeo = new THREE.CylinderGeometry(0.08, 0.05, 0.8);
+    const legGeo = new THREE.CylinderGeometry(0.09, 0.06, 0.8, 16);
     // Move pivot to top of leg
     legGeo.translate(0, -0.4, 0);
 
-    this.leftLeg = new THREE.Mesh(legGeo, mat);
-    this.leftLeg.position.set(-0.1, 0.8, 0);
+    this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
+    this.leftLeg.position.set(-0.11, 0.8, 0);
     this.leftLeg.castShadow = true;
     this.mesh.add(this.leftLeg);
 
-    this.rightLeg = new THREE.Mesh(legGeo, mat);
-    this.rightLeg.position.set(0.1, 0.8, 0);
+    this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
+    this.rightLeg.position.set(0.11, 0.8, 0);
     this.rightLeg.castShadow = true;
     this.mesh.add(this.rightLeg);
 
     // Arms (~0.6m)
-    const armGeo = new THREE.CylinderGeometry(0.05, 0.04, 0.6);
+    const armGeo = new THREE.CylinderGeometry(0.06, 0.045, 0.6, 16);
     // Move pivot to top of arm
     armGeo.translate(0, -0.3, 0);
 
-    this.leftArm = new THREE.Mesh(armGeo, mat);
-    this.leftArm.position.set(-0.25, 1.3, 0);
+    // Sleeves use clothMat, hands use skinMat (simplified as just using skinMat for now or a mixed approach)
+    // To keep rig intact, we'll just use skinMat for arms to represent exposed skin / tight sleeves
+    this.leftArm = new THREE.Mesh(armGeo, skinMat);
+    this.leftArm.position.set(-0.28, 1.3, 0);
     this.leftArm.castShadow = true;
     this.mesh.add(this.leftArm);
 
-    this.rightArm = new THREE.Mesh(armGeo, mat);
-    this.rightArm.position.set(0.25, 1.3, 0);
+    this.rightArm = new THREE.Mesh(armGeo, skinMat);
+    this.rightArm.position.set(0.28, 1.3, 0);
     this.rightArm.castShadow = true;
     this.mesh.add(this.rightArm);
 

@@ -9,6 +9,9 @@ import { InputManager } from './input.js';
 import { WebGPURenderer } from 'three/webgpu';
 import { physics } from './physics.js';
 import { initUI, updateUI } from './ui/index.js';
+import { ParticleSystem } from './particles.js';
+import { VolumetricLightShafts } from './volumetrics.js';
+import { CinematicShader } from './renderer.js';
 
 // Setup for global hook
 declare global {
@@ -28,15 +31,74 @@ async function init() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 
-  setupEnvironment(scene, quality);
+  const urlParams = new URLSearchParams(window.location.search);
+  const todParam = urlParams.get('tod');
+
+  setupEnvironment(scene, quality, renderer, todParam);
   const terrainManager = createTerrain(scene);
   const river = createRiver(scene);
   const decor = createDecor(scene);
+
+  const dustParticles = new ParticleSystem(scene, 'dust');
+  const leavesParticles = new ParticleSystem(scene, 'leaves');
+  const snowParticles = new ParticleSystem(scene, 'snow'); // Could conditionally add based on biome later
+  const volumetrics = new VolumetricLightShafts(scene, todParam);
 
   const input = new InputManager();
   const character = new CharacterController(scene, camera, input);
 
   initUI(character);
+
+  // Setup Post-Processing
+  let composer: any = null;
+  let cinematicPass: any = null;
+  let postProcessing: any = null;
+  const isWebGPU = renderer instanceof WebGPURenderer;
+  const skipPost = urlParams.get('tv') === '1';
+
+  if (!skipPost) {
+      if (isWebGPU) {
+          // WebGPU TSL Post Processing
+          const { pass, uv, float, vec4, Fn } = await import('three/tsl' as any);
+          const { PostProcessing } = await import('three/webgpu');
+
+          const scenePass = pass( scene, camera );
+
+          // Basic vignette via TSL
+          const vignette = Fn( ( [ color ]: [any] ) => {
+             const uvNode = uv();
+             const dist = uvNode.sub( 0.5 ).length();
+             const factor = float( 1.0 ).sub( dist.mul( 1.2 ) ).clamp( 0.0, 1.0 );
+             return vec4( color.rgb.mul( factor ), color.a );
+          } );
+
+          postProcessing = new PostProcessing( renderer as WebGPURenderer );
+
+          // Basic pass-through for WebGPU post to prove pipeline boots
+          postProcessing.outputNode = vignette(scenePass);
+
+      } else {
+          // WebGL2 Post Processing
+          const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+          const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+          const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
+          const { ShaderPass } = await import('three/examples/jsm/postprocessing/ShaderPass.js');
+          const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
+
+          composer = new EffectComposer(renderer as THREE.WebGLRenderer);
+          const renderPass = new RenderPass(scene, camera);
+          composer.addPass(renderPass);
+
+          const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
+          composer.addPass(bloomPass);
+
+          cinematicPass = new ShaderPass(CinematicShader);
+          composer.addPass(cinematicPass);
+
+          const outputPass = new OutputPass();
+          composer.addPass(outputPass);
+      }
+  }
 
   if (physics.world) {
     // Let's add kinematic body to character
@@ -56,7 +118,6 @@ async function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  const urlParams = new URLSearchParams(window.location.search);
   const shot = urlParams.get('shot');
   const tStr = urlParams.get('t');
 
@@ -64,6 +125,12 @@ async function init() {
 
   if (shot) {
     shotMode = true;
+
+    // Hide UI in shot mode
+    const uiRoot = document.getElementById('ui-root');
+    if (uiRoot) {
+      uiRoot.style.display = 'none';
+    }
 
     // Scene positioning
     if (shot === 'valley_overview') {
@@ -117,12 +184,21 @@ async function init() {
     const dt = Math.min(clock.getDelta(), 0.1);
     const time = clock.getElapsedTime();
 
+    if (cinematicPass) {
+       cinematicPass.uniforms['time'].value = time;
+    }
+
     if (!shotMode) {
       physics.update(dt);
       character.update(dt);
       terrainManager.update(character.mesh.position);
       river.update(time);
       decor.update(camera);
+
+      dustParticles.update(camera.position, 'dust');
+      leavesParticles.update(camera.position, 'leaves');
+      snowParticles.update(camera.position, 'snow');
+      volumetrics.update(camera.position);
 
       // Check distance to rockslide trigger zone (approx x: 100, z: 0)
       if (!hasTriggeredRockslide) {
@@ -136,22 +212,48 @@ async function init() {
       updateUI(dt);
     }
 
-    renderer.render(scene, camera);
+    if (!skipPost) {
+       if (isWebGPU && postProcessing) {
+           postProcessing.render();
+       } else if (composer) {
+           composer.render();
+       }
+    } else {
+       renderer.render(scene, camera);
+    }
   }
 
   // Initial render
-  if (renderer instanceof WebGPURenderer) {
-    await renderer.renderAsync(scene, camera);
+  if (!skipPost) {
+      if (isWebGPU && postProcessing) {
+          await postProcessing.renderAsync();
+      } else if (composer) {
+          composer.render();
+      }
   } else {
-    renderer.render(scene, camera);
+      if (renderer instanceof WebGPURenderer) {
+          await renderer.renderAsync(scene, camera);
+      } else {
+          renderer.render(scene, camera);
+      }
   }
+
 
   if (shotMode) {
     // Render once and signal ready
-    renderer.render(scene, camera);
-    if (renderer instanceof WebGPURenderer) {
-      await renderer.renderAsync(scene, camera);
+    if (!skipPost) {
+        if (isWebGPU && postProcessing) {
+            await postProcessing.renderAsync();
+        } else if (composer) {
+            composer.render();
+        }
+    } else {
+        renderer.render(scene, camera);
+        if (renderer instanceof WebGPURenderer) {
+           await renderer.renderAsync(scene, camera);
+        }
     }
+
     setTimeout(() => {
       window.__shotReady = true;
     }, 100);
