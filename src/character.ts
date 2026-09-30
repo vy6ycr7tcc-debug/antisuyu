@@ -131,26 +131,7 @@ export class CharacterController {
 
     scene.add(this.mesh);
 
-    // Camera orbit controls (mouse drag)
-    let isDragging = false;
-    let previousMousePosition = { x: 0, y: 0 };
-
-    window.addEventListener('mousedown', () => isDragging = true);
-    window.addEventListener('mouseup', () => isDragging = false);
-    window.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        const deltaX = e.offsetX - previousMousePosition.x;
-        const deltaY = e.offsetY - previousMousePosition.y;
-
-        this.theta -= deltaX * 0.01;
-        this.phi -= deltaY * 0.01;
-
-        // Clamp phi
-        this.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, this.phi));
-      }
-      previousMousePosition = { x: e.offsetX, y: e.offsetY };
-    });
-
+    // Camera orbit controls are handled via input manager now
     this.updateCamera();
   }
 
@@ -200,6 +181,16 @@ export class CharacterController {
     this.stateTimer += dt;
     this.time += dt;
 
+    // touch-controls: Consume camera delta from touch input
+    if (typeof this.input.getCameraDelta === 'function') {
+      const camDelta = this.input.getCameraDelta();
+      if (camDelta.x !== 0 || camDelta.y !== 0) {
+        this.theta -= camDelta.x * 0.01;
+        this.phi -= camDelta.y * 0.01;
+        this.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, this.phi));
+      }
+    }
+
     // Optional sync to physics
     if (this.body) {
         // Very basic sync for physics interaction, ideally we'd use a proper KinematicCharacterController
@@ -212,8 +203,18 @@ export class CharacterController {
     }
 
     // Movement Input
-    const forward = this.input.isDown('KeyW') ? 1 : (this.input.isDown('KeyS') ? -1 : 0);
-    const right = this.input.isDown('KeyD') ? 1 : (this.input.isDown('KeyA') ? -1 : 0);
+    let forward = this.input.isDown('KeyW') ? 1 : (this.input.isDown('KeyS') ? -1 : 0);
+    let right = this.input.isDown('KeyD') ? 1 : (this.input.isDown('KeyA') ? -1 : 0);
+
+    // touch-controls: Inject analog joystick input
+    if (typeof this.input.getJoystickVector === 'function') {
+      const joy = this.input.getJoystickVector();
+      if (joy.x !== 0 || joy.y !== 0) {
+        forward = -joy.y;
+        right = joy.x;
+      }
+    }
+
     const isRunning = this.input.isDown('ShiftLeft');
 
     let actualForward = forward;
