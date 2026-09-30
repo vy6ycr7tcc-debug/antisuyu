@@ -1,3 +1,4 @@
+import { registerServiceWorker, mountOfflineUI } from "./pwa/offline.js";
 import * as THREE from 'three';
 import { createRenderer, getRenderCaps, QUALITY_TIERS } from './renderer.js';
 import { setupEnvironment } from './environment.js';
@@ -214,6 +215,10 @@ async function init() {
   const touchControls = new TouchControls(input);
 
   const character = new CharacterController(scene, camera, input);
+
+  // PWA/offline boot block
+  registerServiceWorker();
+  mountOfflineUI();
 
   initUI(character);
 
