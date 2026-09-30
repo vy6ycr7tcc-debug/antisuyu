@@ -1,117 +1,143 @@
 import * as THREE from 'three';
 
+import { getGlobalTerrainHeight } from './terrain.js';
+
+export class DecorManager {
+  scene: THREE.Scene;
+  dummy = new THREE.Object3D();
+
+  treeInstanced: THREE.InstancedMesh;
+  rockInstanced: THREE.InstancedMesh;
+  mistInstanced: THREE.InstancedMesh;
+
+  treeCount = 5000;
+  rockCount = 2000;
+  mistCount = 200;
+
+  constructor(scene: THREE.Scene) {
+    this.scene = scene;
+
+    // 1. Trees/Foliage (Jungle + Ichu Grass depending on biome)
+    const leavesGeo = new THREE.ConeGeometry(3, 8, 8);
+    leavesGeo.translate(0, 4, 0);
+    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d4c1e, roughness: 0.9 });
+    this.treeInstanced = new THREE.InstancedMesh(leavesGeo, leavesMat, this.treeCount);
+    this.treeInstanced.castShadow = true;
+    this.treeInstanced.receiveShadow = true;
+    this.scene.add(this.treeInstanced);
+
+    // 2. Rocks
+    const rockGeo = new THREE.DodecahedronGeometry(2);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.1 });
+    this.rockInstanced = new THREE.InstancedMesh(rockGeo, rockMat, this.rockCount);
+    this.rockInstanced.castShadow = true;
+    this.rockInstanced.receiveShadow = true;
+    this.scene.add(this.rockInstanced);
+
+    // 3. Mist
+    const mistGeo = new THREE.PlaneGeometry(30, 15);
+    const mistMat = new THREE.MeshBasicMaterial({
+      color: 0xdddddd,
+      transparent: true,
+      opacity: 0.1,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    this.mistInstanced = new THREE.InstancedMesh(mistGeo, mistMat, this.mistCount);
+    this.scene.add(this.mistInstanced);
+  }
+
+  update(camera: THREE.Camera) {
+    // Dynamic update based on camera position (LOD/streaming for decor)
+    // For now, we update matrices in a radius around the camera
+    const camPos = camera.position;
+
+    // Simple noise generator for deterministic placement
+    const seededRandom = (x: number, z: number) => {
+        return Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+    };
+
+    let treeIdx = 0;
+    let rockIdx = 0;
+    let mistIdx = 0;
+
+    const radius = 600;
+    const step = 20;
+
+    for (let x = -radius; x < radius; x += step) {
+      for (let z = -radius; z < radius; z += step) {
+        const worldX = camPos.x + x;
+        const worldZ = camPos.z + z;
+
+        // Quantize to grid
+        const qx = Math.floor(worldX / step) * step;
+        const qz = Math.floor(worldZ / step) * step;
+
+        const rand = seededRandom(qx, qz);
+        const y = getGlobalTerrainHeight(qx, qz);
+
+        const isHighSierra = worldZ > 500 || y > 50;
+
+        // Tree / Grass
+        if (treeIdx < this.treeCount && rand < 0.3 && y > 2) {
+          this.dummy.position.set(qx, y, qz);
+          if (isHighSierra) {
+            // Ichu grass scatter (shorter, squatter)
+            const scale = 0.2 + rand * 0.2;
+            this.dummy.scale.set(scale * 2, scale, scale * 2);
+          } else {
+            // Jungle tree
+            const scale = 0.5 + rand * 0.5;
+            this.dummy.scale.set(scale, scale, scale);
+          }
+          this.dummy.rotation.y = rand * Math.PI * 2;
+          this.dummy.updateMatrix();
+          this.treeInstanced.setMatrixAt(treeIdx, this.dummy.matrix);
+          treeIdx++;
+        }
+
+        // Rocks
+        if (rockIdx < this.rockCount && rand > 0.8) {
+          this.dummy.position.set(qx, y + 0.5, qz);
+          const scale = 0.2 + rand * 1.5;
+          if (isHighSierra) {
+             // More glacial erratic rocks
+             this.dummy.scale.set(scale * 1.5, scale * 1.5, scale * 1.5);
+          } else {
+             this.dummy.scale.set(scale, scale * 0.8, scale);
+          }
+          this.dummy.rotation.set(rand * Math.PI, rand * Math.PI, rand * Math.PI);
+          this.dummy.updateMatrix();
+          this.rockInstanced.setMatrixAt(rockIdx, this.dummy.matrix);
+          rockIdx++;
+        }
+
+        // Mist
+        if (mistIdx < this.mistCount && rand > 0.4 && rand < 0.45 && y < 10) {
+          this.dummy.position.set(qx, y + 5 + rand * 5, qz);
+          this.dummy.scale.setScalar(1 + rand);
+          this.dummy.rotation.y = rand * Math.PI;
+          this.dummy.updateMatrix();
+          this.mistInstanced.setMatrixAt(mistIdx, this.dummy.matrix);
+          mistIdx++;
+        }
+      }
+    }
+
+    // Hide remaining instances
+    this.dummy.position.set(0, -1000, 0);
+    this.dummy.updateMatrix();
+
+    for (let i = treeIdx; i < this.treeCount; i++) this.treeInstanced.setMatrixAt(i, this.dummy.matrix);
+    for (let i = rockIdx; i < this.rockCount; i++) this.rockInstanced.setMatrixAt(i, this.dummy.matrix);
+    for (let i = mistIdx; i < this.mistCount; i++) this.mistInstanced.setMatrixAt(i, this.dummy.matrix);
+
+    this.treeInstanced.instanceMatrix.needsUpdate = true;
+    this.rockInstanced.instanceMatrix.needsUpdate = true;
+    this.mistInstanced.instanceMatrix.needsUpdate = true;
+  }
+}
+
 export function createDecor(scene: THREE.Scene) {
-  // 1. Instanced Trees/Foliage
-  const treeCount = 5000;
-
-  // Simple tree placeholder: a cone top (instanced for simplicity in slice)
-  const leavesGeo = new THREE.ConeGeometry(3, 8, 8);
-  leavesGeo.translate(0, 4, 0);
-
-  const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d4c1e, roughness: 0.9 });
-  const treeInstanced = new THREE.InstancedMesh(leavesGeo, leavesMat, treeCount);
-  treeInstanced.castShadow = true;
-  treeInstanced.receiveShadow = true;
-
-  const dummy = new THREE.Object3D();
-  let count = 0;
-
-  // Need to distribute trees based on the same logic as terrain height
-  for (let i = 0; i < treeCount * 3; i++) {
-    if (count >= treeCount) break;
-
-    const x = (Math.random() - 0.5) * 1000;
-    const z = (Math.random() - 0.5) * 1000;
-
-    const valleyShape = Math.pow(Math.abs(x / 500), 2) * 100;
-    const noise = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5 + Math.sin(x * 0.01 + z * 0.02) * 15;
-    const riverBed = -Math.exp(-Math.pow(x / 30, 2)) * 10;
-    const y = valleyShape + noise + riverBed;
-
-    // Don't place trees in the river or on very steep slopes (simplified here by height limits)
-    if (y > 2 && Math.abs(x) > 40) {
-      dummy.position.set(x, y, z);
-      const scale = 0.5 + Math.random() * 0.5;
-      dummy.scale.set(scale, scale, scale);
-      dummy.rotation.y = Math.random() * Math.PI * 2;
-      dummy.updateMatrix();
-      treeInstanced.setMatrixAt(count, dummy.matrix);
-      count++;
-    }
-  }
-
-  scene.add(treeInstanced);
-
-  // 2. Scattered Rocks
-  const rockCount = 2000;
-  const rockGeo = new THREE.DodecahedronGeometry(2);
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.1 });
-  const rockInstanced = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
-  rockInstanced.castShadow = true;
-  rockInstanced.receiveShadow = true;
-
-  count = 0;
-  for (let i = 0; i < rockCount * 2; i++) {
-    if (count >= rockCount) break;
-
-    const x = (Math.random() - 0.5) * 1000;
-    const z = (Math.random() - 0.5) * 1000;
-
-    const valleyShape = Math.pow(Math.abs(x / 500), 2) * 100;
-    const noise = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5 + Math.sin(x * 0.01 + z * 0.02) * 15;
-    const riverBed = -Math.exp(-Math.pow(x / 30, 2)) * 10;
-    const y = valleyShape + noise + riverBed;
-
-    dummy.position.set(x, y + 0.5, z);
-    const scale = 0.2 + Math.random() * 1.5;
-    dummy.scale.set(scale, scale * (0.5 + Math.random() * 0.5), scale);
-    dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    dummy.updateMatrix();
-    rockInstanced.setMatrixAt(count, dummy.matrix);
-    count++;
-  }
-
-  scene.add(rockInstanced);
-
-  // 3. Mist Billboards in low areas
-  const mistCount = 200;
-  const mistGeo = new THREE.PlaneGeometry(30, 15);
-  const mistMat = new THREE.MeshBasicMaterial({
-    color: 0xdddddd,
-    transparent: true,
-    opacity: 0.1,
-    depthWrite: false,
-    side: THREE.DoubleSide
-  });
-
-  const mistInstanced = new THREE.InstancedMesh(mistGeo, mistMat, mistCount);
-  count = 0;
-  for (let i = 0; i < mistCount * 2; i++) {
-    if (count >= mistCount) break;
-
-    const x = (Math.random() - 0.5) * 400; // closer to river
-    const z = (Math.random() - 0.5) * 1000;
-
-    const valleyShape = Math.pow(Math.abs(x / 500), 2) * 100;
-    const noise = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 5 + Math.sin(x * 0.01 + z * 0.02) * 15;
-    const riverBed = -Math.exp(-Math.pow(x / 30, 2)) * 10;
-    const y = valleyShape + noise + riverBed;
-
-    if (y < 10) {
-      dummy.position.set(x, y + 5 + Math.random() * 5, z);
-      dummy.scale.setScalar(1 + Math.random());
-      dummy.rotation.y = Math.random() * Math.PI;
-      dummy.updateMatrix();
-      mistInstanced.setMatrixAt(count, dummy.matrix);
-      count++;
-    }
-  }
-
-  scene.add(mistInstanced);
-
-  return {
-    update: (_camera: THREE.Camera) => {
-        // Billboard update could go here
-    }
-  }
+  return new DecorManager(scene);
 }

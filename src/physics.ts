@@ -103,11 +103,18 @@ export class PhysicsSystem {
     }
   }
 
-  createTerrainCollider(mesh: THREE.Mesh) {
-    if (this.isFallback || !this.world) return;
+  createTerrainCollider(mesh: THREE.Mesh): { body: RAPIER.RigidBody, collider: RAPIER.Collider } | null {
+    if (this.isFallback || !this.world) return null;
 
     const geometry = mesh.geometry;
-    const vertices = geometry.attributes.position.array as Float32Array;
+    // We need to bake the mesh's position offset into the vertices for a fixed collider
+    const vertices = new Float32Array(geometry.attributes.position.array.length);
+    const posAttr = geometry.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      vertices[i * 3] = posAttr.getX(i) + mesh.position.x;
+      vertices[i * 3 + 1] = posAttr.getY(i) + mesh.position.y;
+      vertices[i * 3 + 2] = posAttr.getZ(i) + mesh.position.z;
+    }
 
     let indices: Uint32Array;
     if (geometry.index) {
@@ -122,7 +129,15 @@ export class PhysicsSystem {
     const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed();
     const rigidBody = this.world.createRigidBody(rigidBodyDesc);
     const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices);
-    this.world.createCollider(colliderDesc, rigidBody);
+    const collider = this.world.createCollider(colliderDesc, rigidBody);
+
+    return { body: rigidBody, collider };
+  }
+
+  removeTerrainCollider(data: { body: RAPIER.RigidBody, collider: RAPIER.Collider }) {
+    if (this.isFallback || !this.world) return;
+    this.world.removeCollider(data.collider, false);
+    this.world.removeRigidBody(data.body);
   }
 
   createRopeBridge(scene: THREE.Scene, start: THREE.Vector3, end: THREE.Vector3) {

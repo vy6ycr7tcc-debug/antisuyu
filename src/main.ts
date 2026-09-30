@@ -29,8 +29,7 @@ async function init() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 
   setupEnvironment(scene, quality);
-  const terrain = createTerrain(scene);
-  physics.createTerrainCollider(terrain);
+  const terrainManager = createTerrain(scene);
   const river = createRiver(scene);
   const decor = createDecor(scene);
 
@@ -121,6 +120,7 @@ async function init() {
     if (!shotMode) {
       physics.update(dt);
       character.update(dt);
+      terrainManager.update(character.mesh.position);
       river.update(time);
       decor.update(camera);
 
