@@ -3,6 +3,7 @@ import { InputManager } from './input.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { physics } from './physics.js';
 import { getGlobalTerrainHeight } from './terrain.js';
+import { skinNaira, clothField, hairDark, leatherDark } from './materials.js';
 
 export enum MovementState {
   WALK = 'WALK',
@@ -53,37 +54,16 @@ export class CharacterController {
     this.mesh = new THREE.Group();
 
     // Skin with subsurface scattering approximation
-    const skinMat = new THREE.MeshPhysicalMaterial({
-        color: 0x8d5524,
-        roughness: 0.4,
-        metalness: 0.0,
-        transmission: 0.1, // Fake SSS via transmission/thickness
-        thickness: 0.5,
-        clearcoat: 0.1
-    });
+    const skinMat = skinNaira();
 
     // Cloth PBR (weather-worn field clothing)
-    const clothMat = new THREE.MeshPhysicalMaterial({
-        color: 0x4a5d23, // Muted field green
-        roughness: 0.9,
-        metalness: 0.0,
-        clearcoat: 0.0
-    });
+    const clothMat = clothField();
 
     // Pants (tough fabric)
-    const pantsMat = new THREE.MeshPhysicalMaterial({
-        color: 0x3d2c23, // Dark brown
-        roughness: 0.95,
-        metalness: 0.0
-    });
+    const pantsMat = clothField();
 
     // Gear (leather/straps)
-    const gearMat = new THREE.MeshPhysicalMaterial({
-        color: 0x2c1a10, // Dark leather
-        roughness: 0.6,
-        metalness: 0.1,
-        clearcoat: 0.2
-    });
+    const gearMat = leatherDark();
 
     // Torso (Jacket/Shirt)
     const torsoGeo = new THREE.CylinderGeometry(0.22, 0.18, 0.6, 16);
@@ -111,12 +91,7 @@ export class CharacterController {
        new THREE.Vector3(0, -0.3, -0.18)
     ]);
     const braidGeo = new THREE.TubeGeometry(braidPath, 8, 0.03, 8, false);
-    const hairMat = new THREE.MeshPhysicalMaterial({
-        color: 0x0a0a0a,
-        roughness: 0.4,
-        metalness: 0.1,
-        clearcoat: 0.3 // Shiny hair response
-    });
+    const hairMat = hairDark();
     const braid = new THREE.Mesh(braidGeo, hairMat);
     head.add(braid);
 

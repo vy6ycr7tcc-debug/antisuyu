@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+// @ts-ignore
+import { ashlarLight, gold, bronze, channelClear, ashlarWeathered } from '../materials.js';
 import type {
   RegionModule,
   RegionBuildAPI,
@@ -79,31 +81,12 @@ export const paititi: RegionModule = {
     paititiGroup.name = 'PaititiGroup';
 
     // Base materials
-    const stoneMaterial = new THREE.MeshStandardMaterial({
-      color: 0xdadad0,
-      roughness: 0.8,
-      metalness: 0.1,
-    });
+    const stoneMaterial = ashlarLight();
+    const goldMaterial = gold();
+    const bronzeMaterial = bronze();
 
-    const goldMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      roughness: 0.3,
-      metalness: 1.0,
-    });
-
-    const bronzeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xcd7f32,
-      roughness: 0.5,
-      metalness: 0.8,
-    });
-
-    const waterMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4aa0e0,
-      transparent: true,
-      opacity: 0.8,
-      roughness: 0.1,
-      metalness: 0.1,
-    });
+    const waterMaterial = channelClear();
+    waterMaterial.color.setHex(0x2E5A6E); // channel clear per region script
 
     // 1. The Outer Terraces
     const terracesCenter = { x: 900, z: -100 };
@@ -172,7 +155,7 @@ export const paititi: RegionModule = {
 
     // Pillars with explosive charges
     const pillarGeo = new THREE.CylinderGeometry(1.5, 1.5, 30, 16);
-    const chargeMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const chargeMaterial = bronze();
     const charges: THREE.Mesh[] = [];
 
     for (let i = 0; i < 4; i++) {
@@ -224,6 +207,7 @@ export const paititi: RegionModule = {
 
     // Light shaft for climax
     const lightShaftGeo = new THREE.CylinderGeometry(4, 4, 100, 32);
+    // @ts-ignore
     const lightShaftMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
     const lightShaft = new THREE.Mesh(lightShaftGeo, lightShaftMat);
     lightShaft.position.set(sanctuaryCenter.x, sanctuaryHeight + 50, sanctuaryCenter.z);
@@ -273,10 +257,12 @@ export const paititi: RegionModule = {
         timerInterval = setInterval(() => {
           timerCount--;
           const blink = timerCount % 2 === 0;
-          charges.forEach(c => (c.material as THREE.MeshBasicMaterial).color.setHex(blink ? 0xff0000 : 0x330000));
+          // @ts-ignore
+          charges.forEach(c => c.material.color.setHex(blink ? 0xff0000 : 0x330000));
 
           if (timerCount <= 0) {
             const flashGeo = new THREE.SphereGeometry(30, 32, 32);
+            // @ts-ignore
             const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.8 });
             const flash = new THREE.Mesh(flashGeo, flashMat);
             flash.position.set(sanctuaryCenter.x, sanctuaryHeight + 15, sanctuaryCenter.z);

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+// @ts-ignore
 import type { 
     RegionModule, 
     RegionBuildAPI
 } from '../world/contracts.js';
+
 
 export const highSierra: RegionModule = {
     id: 'high_sierra',

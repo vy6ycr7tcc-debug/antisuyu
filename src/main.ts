@@ -12,6 +12,11 @@ import { initUI, updateUI } from './ui/index.js';
 import { ParticleSystem } from './particles.js';
 import { VolumetricLightShafts } from './volumetrics.js';
 import { CinematicShader } from './renderer.js';
+import { createQuestFlags } from './save/questFlags.js';
+import { createSaveSystem } from './save/saveSystem.js';
+import { REGIONS } from './regions/registry.js';
+import { createRegionManager } from './world/regionManager.js';
+import { getGlobalTerrainHeight } from './terrain.js';
 
 // Setup for global hook
 declare global {
@@ -48,6 +53,33 @@ async function init() {
   const character = new CharacterController(scene, camera, input);
 
   initUI(character);
+
+  const flags = createQuestFlags();
+  const saveAPI = createSaveSystem();
+
+  const regionManager = createRegionManager({
+    saveAPI,
+    flags,
+    worldState: {},
+    inventory: [],
+    solvedPuzzles: []
+  });
+
+  for (const region of REGIONS) {
+    const api = {
+      scene,
+      flags,
+      terrainHeight: getGlobalTerrainHeight,
+      onEnterRegion: (cb: () => void) => regionManager.registerEnterCallback(region.id, cb),
+      onExitRegion: (cb: () => void) => regionManager.registerExitCallback(region.id, cb),
+      resolveEncounter: (id: string) => regionManager.resolveEncounter(id)
+    };
+    try {
+      region.build(api);
+    } catch (e) {
+      console.error(`Failed to build region ${region.id}:`, e);
+    }
+  }
 
   // Setup Post-Processing
   let composer: any = null;
@@ -131,9 +163,30 @@ async function init() {
     if (uiRoot) {
       uiRoot.style.display = 'none';
     }
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) {
+      pauseMenu.remove();
+    }
 
     // Scene positioning
-    if (shot === 'valley_overview') {
+    if (shot.startsWith('region:')) {
+      const shotId = shot.replace('region:', '');
+      let found = false;
+      for (const region of REGIONS) {
+        const s = region.shots.find(x => x.id === shotId);
+        if (s) {
+          camera.position.set(s.camera.x, s.camera.y, s.camera.z);
+          camera.lookAt(s.lookAt.x, s.lookAt.y, s.lookAt.z);
+          character.teleport(0, -1000, 0); // Hide character out of frame
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        console.warn(`Shot ID not found: ${shotId}`);
+        character.teleport(0, 0, 0);
+      }
+    } else if (shot === 'valley_overview') {
       character.teleport(0, 400, Math.PI);
     } else if (shot === 'river_crossing') {
       character.teleport(0, 0, Math.PI / 2);
@@ -169,7 +222,19 @@ async function init() {
       }
     }
   } else {
-    character.teleport(0, 0);
+    if (urlParams.get('load') === '1') {
+      const data = saveAPI.load(0);
+      if (data) {
+        console.log(`Loaded save slot 0 from ${new Date(data.savedAt).toLocaleString()}`);
+        character.teleport(data.player.position.x, data.player.position.z, data.player.rotationY);
+        flags.restore(data.questFlags);
+      } else {
+        console.warn('No save found in slot 0 to load.');
+        character.teleport(0, 0);
+      }
+    } else {
+      character.teleport(0, 0);
+    }
   }
 
   const clock = new THREE.Clock();
@@ -192,6 +257,7 @@ async function init() {
       physics.update(dt);
       character.update(dt);
       terrainManager.update(character.mesh.position);
+      regionManager.update(character.mesh.position);
       river.update(time);
       decor.update(camera);
 

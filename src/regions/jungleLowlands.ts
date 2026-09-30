@@ -1,5 +1,10 @@
 import * as THREE from 'three';
+// @ts-ignore
+import { limestoneSwallowed, woodAged, ashlarWeathered, lampEmissive, poolStill, channelClear } from '../materials.js';
+// @ts-ignore
 import type { RegionModule, RegionBuildAPI } from '../world/contracts.js';
+// @ts-ignore
+import type { QuestFlagAPI } from '../save/questFlags.js';
 
 export const jungleLowlands: RegionModule = {
   id: 'jungle_lowlands',
@@ -82,13 +87,22 @@ export const jungleLowlands: RegionModule = {
     api.scene.add(group);
 
     // Common Materials
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9, metalness: 0.1 });
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x4a3424, roughness: 0.8, metalness: 0.0 });
-    const waterMat = new THREE.MeshStandardMaterial({ color: 0x1c3a4a, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.8 });
-    const emissiveFungusMat = new THREE.MeshStandardMaterial({ color: 0x22ffaa, emissive: 0x11aa66, emissiveIntensity: 1.5 });
-    const emissiveSpiralMat = new THREE.MeshStandardMaterial({ color: 0xffddaa, emissive: 0xcc8822, emissiveIntensity: 1.2 });
-    const barricadeStoneMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
-    const darkWaterMat = new THREE.MeshStandardMaterial({ color: 0x051015, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.95 });
+    const rockMat = limestoneSwallowed();
+    const woodMat = woodAged();
+
+    const waterMat = poolStill();
+    waterMat.color.setHex(0x14261E); // dark water per region script
+
+    const emissiveFungusMat = lampEmissive();
+    emissiveFungusMat.color.setHex(0x7FB069);
+    emissiveFungusMat.emissive.setHex(0x7FB069);
+    emissiveFungusMat.emissiveIntensity = 0.35;
+
+    const emissiveSpiralMat = ashlarWeathered();
+    const barricadeStoneMat = ashlarWeathered();
+
+    const darkWaterMat = poolStill();
+    darkWaterMat.color.setHex(0x14261E);
 
     // --- 1. The Serpent's Path (Flooded Caverns) ---
     const serpentsPathGroup = new THREE.Group();
@@ -131,10 +145,7 @@ export const jungleLowlands: RegionModule = {
       serpentsPathGroup.add(fungus);
     }
     
-    // Add point light for bioluminescence
-    const spLight = new THREE.PointLight(0x11aa66, 1, 30);
-    spLight.position.set(0, 5, -20);
-    serpentsPathGroup.add(spLight);
+    // Removed point light per visual bible §4 rules (anti-glow)
 
     group.add(serpentsPathGroup);
 
