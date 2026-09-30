@@ -1,4 +1,15 @@
 import * as THREE from 'three';
+import { TOD_GRADES } from './environment.js';
+
+// Seeded RNG: Mulberry32
+function mulberry32(a: number) {
+  return function() {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
 
 export class VolumetricLightShafts {
   private group: THREE.Group;
@@ -6,13 +17,19 @@ export class VolumetricLightShafts {
   constructor(scene: THREE.Scene, todParam: string | null) {
     this.group = new THREE.Group();
 
+    // Seed the random number generator so layout is identical on every load
+    const random = mulberry32(12345);
+
+    const gradeKey = (todParam || 'day') as keyof typeof TOD_GRADES;
+    const grade = TOD_GRADES[gradeKey] || TOD_GRADES['day'];
+
     // Determine intensity based on time of day
-    let intensity = 0.05;
-    if (todParam === 'dawn' || todParam === 'dusk') {
-       intensity = 0.15; // Strongest at dawn/dusk
-    } else if (todParam === 'noon') {
-       intensity = 0.02; // Subtle at noon
-    }
+    // The bible says "Volumetric shaft intensity peaks here (see §6 in volumetrics: 0.15)."
+    // We map grade.sunIntensity or just use exact gradeKey.
+    let intensity = 0.05; // Day
+    if (gradeKey === 'dawn' || gradeKey === 'dusk') intensity = 0.15;
+    else if (gradeKey === 'noon') intensity = 0.02;
+    else if (gradeKey === 'night') intensity = 0.0;
 
     const canvas = document.createElement('canvas');
     canvas.width = 64;
@@ -39,7 +56,19 @@ export class VolumetricLightShafts {
 
     // Create a few planes arranged radially
     const planesCount = 3;
-    const geometry = new THREE.PlaneGeometry(20, 100);
+
+    // Parse region from URL if available for region-specific intensity/thickness
+    // "Cloud forest and jungle interiors get the strongest shafts; sierra gets thin high-altitude shafts."
+    let shaftWidth = 20;
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const shotParam = urlParams ? urlParams.get('shot') : null;
+    if (shotParam && (shotParam.includes('cf_') || shotParam.includes('jl_'))) {
+        intensity = Math.min(intensity * 1.5, 0.25);
+    } else if (shotParam && shotParam.includes('hs_')) {
+        shaftWidth = 10;
+    }
+
+    const geometry = new THREE.PlaneGeometry(shaftWidth, 100);
 
     for (let i = 0; i < 5; i++) { // 5 clusters of shafts
       const cluster = new THREE.Group();
@@ -53,19 +82,20 @@ export class VolumetricLightShafts {
       }
 
       cluster.position.set(
-        (Math.random() - 0.5) * 200,
-        50 + Math.random() * 20,
-        (Math.random() - 0.5) * 200
+        (random() - 0.5) * 200,
+        50 + random() * 20,
+        (random() - 0.5) * 200
       );
 
-      // Angle shafts to match sun direction (approx)
-      let sunZ = -0.5;
-      let sunX = 0.5;
-      if (todParam === 'dawn') { sunZ = -0.8; sunX = -0.8; }
-      else if (todParam === 'dusk') { sunZ = 0.8; sunX = 0.8; }
-      else if (todParam === 'noon') { sunZ = 0.1; sunX = 0.1; }
+      // Angle shafts to match exact sun direction from TOD_GRADES
+      const phi = THREE.MathUtils.degToRad(90 - grade.sunElevationDeg);
+      const theta = THREE.MathUtils.degToRad(grade.sunAzimuthDeg);
 
-      cluster.lookAt(cluster.position.x + sunX, cluster.position.y - 1, cluster.position.z + sunZ);
+      // Convert spherical to cartesian direction
+      const sunDir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+
+      // The light shaft originates from above, pointing away from the sun.
+      cluster.lookAt(cluster.position.clone().sub(sunDir));
       this.group.add(cluster);
     }
 
