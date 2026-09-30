@@ -341,7 +341,11 @@ async function init() {
       dustParticles.update(camera.position, 'dust');
       leavesParticles.update(camera.position, 'leaves');
       snowParticles.update(camera.position, 'snow');
-      volumetrics.update(camera.position);
+      let activeRegionId = regionManager.currentRegionId;
+      if (shotMode && shot && shot.startsWith('region:')) {
+          activeRegionId = shot.replace('region:', '');
+      }
+      volumetrics.update(camera.position, activeRegionId, todParam);
 
       // Check distance to rockslide trigger zone (approx x: 100, z: 0)
       if (!hasTriggeredRockslide) {

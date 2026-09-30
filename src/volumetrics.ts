@@ -95,14 +95,41 @@ export class VolumetricLightShafts {
       const sunDir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
 
       // The light shaft originates from above, pointing away from the sun.
-      cluster.lookAt(cluster.position.clone().sub(sunDir));
+      cluster.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sunDir);
       this.group.add(cluster);
     }
 
     scene.add(this.group);
   }
 
-  update(_cameraPosition: THREE.Vector3) {
-      // Shafts could slowly drift or follow camera loosely, but keeping static for now is cheaper
+  update(_cameraPosition: THREE.Vector3, regionId?: string | null, todParam?: string | null) {
+      const gradeKey = (todParam || 'day') as keyof typeof TOD_GRADES;
+
+      let baseIntensity = 0.05;
+      if (gradeKey === 'dawn' || gradeKey === 'dusk') baseIntensity = 0.02;
+      else if (gradeKey === 'noon') baseIntensity = 0.15;
+      else if (gradeKey === 'night') baseIntensity = 0.0;
+
+      // Map canopy density from region IDs (implicitly defined by visuals guide / story map)
+      let canopyDensity = 0.0;
+      if (regionId) {
+          if (regionId.includes('cloud_forest') || regionId.includes('jungle_lowlands') || regionId.includes('cf_') || regionId.includes('jl_')) {
+              canopyDensity = 0.8;
+          }
+      } else {
+          const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+          const shotParam = urlParams ? urlParams.get('shot') : null;
+          if (shotParam && (shotParam.includes('cf_') || shotParam.includes('jl_'))) canopyDensity = 0.8;
+      }
+
+      const finalOpacity = baseIntensity * (1.0 - canopyDensity);
+
+      this.group.children.forEach(cluster => {
+          cluster.children.forEach(mesh => {
+              if (mesh instanceof THREE.Mesh && mesh.material instanceof THREE.MeshBasicMaterial) {
+                  mesh.material.opacity = finalOpacity;
+              }
+          });
+      });
   }
 }

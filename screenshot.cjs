@@ -29,7 +29,7 @@ async function run() {
       page.on('console', msg => console.log(`[${mode}] ${msg.type()}: ${msg.text()}`));
 
       console.log(`Loading ${scenario} in ${mode}...`);
-      await page.goto(`http://localhost:5173/antisuyu/?shot=${scenario}&t=2`);
+      await page.goto(`http://localhost:5173/juzu/?shot=${scenario}&t=2`);
 
       try {
         await page.waitForFunction(() => window.__shotReady === true, { timeout: 10000 });
