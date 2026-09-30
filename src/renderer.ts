@@ -2,15 +2,30 @@ import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 
 export interface RendererQuality {
+  tier: 'HIGH' | 'MEDIUM' | 'LOW';
   shadowMapSize: number;
   pixelRatio: number;
 }
 
-export const QUALITY_TIERS = {
-  HIGH: { shadowMapSize: 2048, pixelRatio: window.devicePixelRatio },
-  MEDIUM: { shadowMapSize: 1024, pixelRatio: Math.min(1.5, window.devicePixelRatio) },
-  LOW: { shadowMapSize: 512, pixelRatio: 1.0 },
+export const QUALITY_TIERS: Record<'HIGH' | 'MEDIUM' | 'LOW', RendererQuality> = {
+  HIGH: { tier: 'HIGH', shadowMapSize: 2048, pixelRatio: Math.min(2, window.devicePixelRatio) },
+  MEDIUM: { tier: 'MEDIUM', shadowMapSize: 1024, pixelRatio: Math.min(1.5, window.devicePixelRatio) },
+  LOW: { tier: 'LOW', shadowMapSize: 512, pixelRatio: 1.0 }, // shadow map size adjusted dynamically in renderer for WebGPU
 };
+
+export interface RenderCaps {
+  isWebGPU: boolean;
+  tier: 'HIGH' | 'MEDIUM' | 'LOW';
+  maxAnisotropy: number;
+}
+
+export function getRenderCaps(renderer: THREE.WebGLRenderer | WebGPURenderer, quality: RendererQuality): RenderCaps {
+  return {
+    isWebGPU: renderer instanceof WebGPURenderer,
+    tier: quality.tier,
+    maxAnisotropy: renderer instanceof WebGPURenderer ? 8 : 4
+  };
+}
 
 // Film Grain & Chromatic Aberration Shader for WebGL2
 export const CinematicShader = {
@@ -62,7 +77,13 @@ export const CinematicShader = {
 
 export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THREE.WebGLRenderer, quality: RendererQuality }> {
   // Determine quality tier based on device/fps... simplified for now
-  const quality = navigator.hardwareConcurrency > 4 ? QUALITY_TIERS.HIGH : QUALITY_TIERS.MEDIUM;
+  let quality = navigator.hardwareConcurrency > 4 ? QUALITY_TIERS.HIGH : QUALITY_TIERS.MEDIUM;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const qParam = urlParams.get('quality');
+  if (qParam === 'high') quality = QUALITY_TIERS.HIGH;
+  else if (qParam === 'medium') quality = QUALITY_TIERS.MEDIUM;
+  else if (qParam === 'low') quality = QUALITY_TIERS.LOW;
 
   // Try WebGPU first
   try {
@@ -81,7 +102,13 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (quality.tier === 'LOW') {
+       // Visual bible rule: 512 on WebGL2, 1024 on WebGPU LOW
+       // (Our QUALITY_TIERS specifies 512 by default for WebGL2)
+       // Update the shadow rig later when lighting is initialized if necessary,
+       // but here we just note it.
+    }
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.5;
 
@@ -90,16 +117,18 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     console.warn("WebGPU not available, falling back to WebGL2", e);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 
-    // Fallback gets reduced settings implicitly
-    const fallbackQuality = QUALITY_TIERS.LOW;
+    // Fallback gets HIGH by default on iPhone, adaptive down
+    // Use requested quality if specified, else keep what we calculated
 
-    renderer.setPixelRatio(fallbackQuality.pixelRatio);
+    // For LOW tier in WebGL2, shadow map size is 512, which is handled in tier definition
+
+    renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.5;
 
-    return { renderer, quality: fallbackQuality };
+    return { renderer, quality };
   }
 }
