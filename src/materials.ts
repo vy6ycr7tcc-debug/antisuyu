@@ -249,6 +249,88 @@ export function lampEmissive(): THREE.MeshStandardMaterial {
     });
 }
 
+// --- Water ---
+
+// Pool still (Still/slow pool water)
+export function poolStill(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x14261E, // Dark water
+        roughness: 0.08,
+        metalness: 0.0,
+        transparent: true,
+        opacity: 0.85,
+        normalMap: getNormalMap(),
+    });
+}
+
+export async function buildPoolStillWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
+    if (!caps.isWebGPU) return null;
+    const TSL = await loadWebGPU();
+    if (TSL && TSL.MeshPhysicalNodeMaterial) {
+        const mat = new TSL.MeshPhysicalNodeMaterial({
+            color: 0x14261E,
+            roughness: 0.08,
+            metalness: 0.0,
+            transmission: 0.6,
+            transparent: true,
+        });
+
+        if (TSL.texture && TSL.time && TSL.vec2) {
+            const normalMap = getNormalMap();
+            // Slow flowing normals
+            const offset1 = TSL.time.mul(0.05);
+            const offset2 = TSL.time.mul(-0.02);
+
+            // Mix two scrolling layers
+            const n1 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset1, offset1)));
+            const n2 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset2, 0.0)));
+            mat.normalNode = n1.add(n2).mul(0.5);
+        }
+        return mat as any;
+    }
+    return null;
+}
+
+// Channel clear (Clear flowing channel water)
+export function channelClear(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x2E5A6E, // Channel water
+        roughness: 0.08,
+        metalness: 0.0,
+        transparent: true,
+        opacity: 0.85,
+        normalMap: getNormalMap(),
+    });
+}
+
+export async function buildChannelClearWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
+    if (!caps.isWebGPU) return null;
+    const TSL = await loadWebGPU();
+    if (TSL && TSL.MeshPhysicalNodeMaterial) {
+        const mat = new TSL.MeshPhysicalNodeMaterial({
+            color: 0x2E5A6E,
+            roughness: 0.08,
+            metalness: 0.0,
+            transmission: 0.6,
+            transparent: true,
+        });
+
+        if (TSL.texture && TSL.time && TSL.vec2) {
+            const normalMap = getNormalMap();
+            // Faster flowing normals for channel
+            const offset1 = TSL.time.mul(0.15);
+            const offset2 = TSL.time.mul(0.08);
+
+            // Mix two scrolling layers
+            const n1 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset1, 0.0)));
+            const n2 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(0.0, offset2)));
+            mat.normalNode = n1.add(n2).mul(0.5);
+        }
+        return mat as any;
+    }
+    return null;
+}
+
 // --- Character ---
 
 // Skin Naira (with SSS approximation)
