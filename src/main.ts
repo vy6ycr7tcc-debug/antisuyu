@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createRenderer } from './renderer.js';
+import { createRenderer, getRenderCaps, QUALITY_TIERS } from './renderer.js';
 import { setupEnvironment } from './environment.js';
 import { createTerrain } from './terrain.js';
 import { createRiver } from './river.js';
@@ -22,13 +22,172 @@ import { getGlobalTerrainHeight } from './terrain.js';
 declare global {
   interface Window {
     __shotReady?: boolean;
+    __frameStats?: { fps: number; low1Percent: number; };
+    __reducedMotion?: boolean;
+    __currentQualityTier?: 'HIGH' | 'MEDIUM' | 'LOW';
   }
 }
 
 async function init() {
   await physics.init();
 
-  const { renderer, quality } = await createRenderer();
+  const { renderer, quality: initialQuality } = await createRenderer();
+
+  const urlParams = new URLSearchParams(window.location.search);
+
+  // QUALITY BLOCK START (frame stats & adaptive quality)
+  let quality = initialQuality;
+  window.__currentQualityTier = quality.tier;
+  const renderCaps = getRenderCaps(renderer as any, quality);
+
+  const frameTimes: number[] = [];
+  const maxFrames = 120;
+  let lastFrameTime = performance.now();
+  let framesBelow25 = 0;
+  let framesAbove45 = 0;
+
+  function updateFrameStats() {
+    const now = performance.now();
+    const dt = now - lastFrameTime;
+    lastFrameTime = now;
+
+    frameTimes.push(dt);
+    if (frameTimes.length > maxFrames) frameTimes.shift();
+
+    if (frameTimes.length === maxFrames) {
+      let sum = 0;
+      for (let i = 0; i < maxFrames; i++) sum += frameTimes[i];
+      const avgDt = sum / maxFrames;
+      const fps = 1000 / avgDt;
+
+      const sorted = [...frameTimes].sort((a, b) => b - a);
+      const p1Index = Math.floor(maxFrames * 0.01);
+      const low1PercentDt = sorted[p1Index];
+      const low1Percent = 1000 / low1PercentDt;
+
+      window.__frameStats = { fps, low1Percent };
+
+      // Heat-aware adaptive quality
+      // Drop tier after 3s (approx 75 frames @25fps) < 25fps
+      if (fps < 25) {
+        framesBelow25++;
+        framesAbove45 = 0;
+      } else if (fps > 45) {
+        framesAbove45++;
+        framesBelow25 = 0;
+      } else {
+        framesBelow25 = 0;
+        framesAbove45 = 0;
+      }
+
+      if (framesBelow25 > 75) {
+        if (quality.tier === 'HIGH') adaptQuality('MEDIUM');
+        else if (quality.tier === 'MEDIUM') adaptQuality('LOW');
+        framesBelow25 = 0;
+      } else if (framesAbove45 > 135) { // 3s @45fps
+        if (quality.tier === 'LOW') adaptQuality('MEDIUM');
+        else if (quality.tier === 'MEDIUM') adaptQuality('HIGH');
+        framesAbove45 = 0;
+      }
+    }
+  }
+
+  function adaptQuality(newTier: 'HIGH' | 'MEDIUM' | 'LOW') {
+    if (quality.tier === newTier) return;
+    if (urlParams.has('quality')) return; // locked by URL
+
+    quality = QUALITY_TIERS[newTier];
+    window.__currentQualityTier = quality.tier;
+    renderCaps.tier = quality.tier;
+    renderer.setPixelRatio(quality.pixelRatio);
+    renderer.shadowMap.type = (newTier === 'LOW' && !renderCaps.isWebGPU) ? THREE.PCFShadowMap : (renderCaps.isWebGPU ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap);
+    console.log(`Adaptive quality changed to ${newTier}`);
+  }
+
+  // Battery-aware quality
+  let batteryWasLow = false;
+  let preBatteryTier: 'HIGH' | 'MEDIUM' | 'LOW' = quality.tier;
+  if ('getBattery' in navigator) {
+    (navigator as any).getBattery().then((battery: any) => {
+      const checkBattery = () => {
+        if (battery.level < 0.2 && !battery.charging) {
+          if (!batteryWasLow) {
+            preBatteryTier = quality.tier;
+            adaptQuality('LOW');
+            console.log("Toast: Battery low, dropping to LOW tier to save power.");
+            batteryWasLow = true;
+          }
+        } else if (battery.charging && batteryWasLow) {
+            adaptQuality(preBatteryTier);
+            console.log("Toast: Device charging, restoring quality.");
+            batteryWasLow = false;
+        }
+      };
+      battery.addEventListener('levelchange', checkBattery);
+      battery.addEventListener('chargingchange', checkBattery);
+      checkBattery();
+    });
+  }
+
+  // Reduced motion preference
+  const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  window.__reducedMotion = mediaQuery.matches;
+  mediaQuery.addEventListener('change', () => {
+    window.__reducedMotion = mediaQuery.matches;
+  });
+
+  // Visibility pause
+  let isPaused = false;
+  document.addEventListener('visibilitychange', () => {
+    isPaused = document.hidden;
+    const ctx = THREE.AudioContext.getContext() as any;
+    if (isPaused) {
+      if (ctx.state === 'running') {
+        ctx.suspend();
+      }
+    } else {
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      lastFrameTime = performance.now();
+    }
+  });
+
+  // Performance Overlay
+  let perfOverlay: HTMLDivElement | null = null;
+  if (urlParams.has('perf')) {
+    perfOverlay = document.createElement('div');
+    perfOverlay.style.position = 'absolute';
+    perfOverlay.style.top = '10px';
+    perfOverlay.style.left = '10px';
+    perfOverlay.style.color = 'lime';
+    perfOverlay.style.fontFamily = 'monospace';
+    perfOverlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    perfOverlay.style.padding = '5px';
+    perfOverlay.style.zIndex = '9999';
+    perfOverlay.style.pointerEvents = 'none';
+    document.body.appendChild(perfOverlay);
+
+    // Periodically update UI
+    setInterval(async () => {
+       if (!perfOverlay) return;
+       let text = `FPS: ${Math.round(window.__frameStats?.fps || 0)}\n1% Low: ${Math.round(window.__frameStats?.low1Percent || 0)}\nTier: ${window.__currentQualityTier}\n`;
+
+       if ('getBattery' in navigator) {
+           const b: any = await (navigator as any).getBattery();
+           text += `Battery: ${Math.round(b.level * 100)}% ${b.charging ? '(AC)' : '(DC)'}\n`;
+       }
+       if (navigator.storage && navigator.storage.estimate) {
+           const est = await navigator.storage.estimate();
+           const usedMB = ((est.usage || 0) / (1024 * 1024)).toFixed(1);
+           const quotaMB = ((est.quota || 0) / (1024 * 1024)).toFixed(1);
+           text += `Storage: ${usedMB} / ${quotaMB} MB\n`;
+       }
+       perfOverlay.innerText = text;
+    }, 1000);
+  }
+
+  // QUALITY BLOCK END
 
   // Need to append renderer to the DOM
   document.getElementById('app')?.appendChild(renderer.domElement);
@@ -36,7 +195,6 @@ async function init() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 
-  const urlParams = new URLSearchParams(window.location.search);
   const todParam = urlParams.get('tod');
 
   setupEnvironment(scene, quality, renderer, todParam);
@@ -101,7 +259,8 @@ async function init() {
 
           const scenePass = pass( scene, camera );
 
-          // Full-res bloom for HIGH tier / WebGPU
+          // Bloom full res on WebGPU HIGH, otherwise half resolution or no bloom if disabled
+          // A budget optimization for WebGPU medium/low tiers as well
           const bloomPass = bloom(scenePass, 0.35, 0.4, 0.85);
 
           const random = Fn(([p]: [any]) => {
@@ -321,6 +480,8 @@ async function init() {
   function animate() {
     if (!shotMode) {
       requestAnimationFrame(animate);
+      if (isPaused) return;
+      updateFrameStats();
     }
 
     const dt = Math.min(clock.getDelta(), 0.1);
