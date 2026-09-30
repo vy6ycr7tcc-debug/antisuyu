@@ -3,7 +3,34 @@
 > vite
 
 
-  VITE v8.3.1  ready in 250 ms
+  VITE v8.3.1  ready in 247 ms
 
   ➜  Local:   http://localhost:5173/antisuyu/
   ➜  Network: use --host to expose
+12:59:12 AM [vite] (client) page reload src/environment.ts
+12:59:30 AM [vite] (client) page reload src/main.ts
+1:00:45 AM [vite] (client) page reload src/environment.ts
+1:02:22 AM [vite] (client) page reload src/environment.ts
+1:06:11 AM [vite] (client) page reload src/terrain.ts
+1:06:48 AM [vite] (client) page reload src/decor.ts
+1:07:16 AM [vite] (client) page reload src/river.ts
+1:08:10 AM [vite] (client) page reload src/character.ts
+1:14:00 AM [vite] (client) page reload src/main.ts
+1:14:13 AM [vite] (client) page reload src/environment.ts
+1:14:49 AM [vite] (client) page reload src/main.ts
+1:15:31 AM [vite] (client) [optimizer] bundling dependencies...
+1:15:32 AM [vite] (client) dependencies optimized: three/examples/jsm/objects/SkyMesh.js, three/examples/jsm/objects/Sky.js
+1:25:25 AM [vite] (client) page reload src/environment.ts
+1:27:42 AM [vite] (client) page reload src/main.ts
+1:37:53 AM [vite] (client) page reload src/character.ts
+1:42:11 AM [vite] (client) page reload src/renderer.ts
+1:42:59 AM [vite] (client) page reload src/renderer.ts
+1:44:25 AM [vite] (client) page reload src/renderer.ts
+1:44:40 AM [vite] (client) page reload src/main.ts
+1:45:23 AM [vite] (client) page reload src/main.ts
+1:45:28 AM [vite] (client) page reload src/renderer.ts
+1:46:15 AM [vite] (client) dependencies optimized: three/examples/jsm/postprocessing/EffectComposer.js, three/examples/jsm/postprocessing/OutputPass.js, three/examples/jsm/postprocessing/RenderPass.js, three/examples/jsm/postprocessing/ShaderPass.js, three/examples/jsm/postprocessing/UnrealBloomPass.js, three/tsl
+1:46:15 AM [vite] (client) optimized dependencies changed. reloading
+1:56:44 AM [vite] (client) page reload src/main.ts
+1:57:56 AM [vite] (client) page reload src/main.ts
+1:59:48 AM [vite] (client) page reload src/main.ts
