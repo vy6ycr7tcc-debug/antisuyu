@@ -1,7 +1,7 @@
 {
   "name": "app",
   "version": "1.0.0",
-  "description": "ANTISUYU — a realistic WebGPU open-world adventure set in the Andes. The search for Paititi.",
+  "description": "Juzu — a realistic WebGPU open-world adventure set in the Andes. The search for Paititi.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,16 +11,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vy6ycr7tcc-debug/antisuyu.git"
+    "url": "git+https://github.com/vy6ycr7tcc-debug/juzu.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/vy6ycr7tcc-debug/antisuyu/issues"
+    "url": "https://github.com/vy6ycr7tcc-debug/juzu/issues"
   },
-  "homepage": "https://github.com/vy6ycr7tcc-debug/antisuyu#readme",
+  "homepage": "https://github.com/vy6ycr7tcc-debug/juzu#readme",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
     "three": "^0.186.1"

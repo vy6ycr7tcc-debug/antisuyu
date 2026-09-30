@@ -27,7 +27,8 @@ export interface SaveAPI {
   migrate(raw: unknown): SaveData;
 }
 
-const STORAGE_PREFIX = 'antisuyu.save.v1.slot';
+const OLD_STORAGE_PREFIX = 'antisuyu.save.v1.slot';
+const NEW_STORAGE_PREFIX = 'juzu.save.v1.slot';
 
 export function createSaveSystem(storage?: Storage): SaveAPI {
   // Graceful fallback if storage isn't available
@@ -104,20 +105,45 @@ export function createSaveSystem(storage?: Storage): SaveAPI {
   return {
     save(slot = 0) {
       if (!pendingAutosave) return;
-      const key = `${STORAGE_PREFIX}${slot}`;
+      const key = `${NEW_STORAGE_PREFIX}${slot}`;
       pendingAutosave.savedAt = Date.now();
       const json = JSON.stringify(pendingAutosave);
       safeSetItem(key, json);
     },
 
     load(slot = 0) {
-      const key = `${STORAGE_PREFIX}${slot}`;
-      const json = safeGetItem(key);
-      if (!json) return null;
+      const newKey = `${NEW_STORAGE_PREFIX}${slot}`;
+      const newJson = safeGetItem(newKey);
+
+      if (newJson) {
+        try {
+          const raw = JSON.parse(newJson);
+          return migrate(raw);
+        } catch (e) {
+          console.error(`Failed to parse save data for slot ${slot}:`, e);
+          return null;
+        }
+      }
+
+      const oldKey = `${OLD_STORAGE_PREFIX}${slot}`;
+      const oldJson = safeGetItem(oldKey);
+
+      if (!oldJson) return null;
 
       try {
-        const raw = JSON.parse(json);
-        return migrate(raw);
+        const raw = JSON.parse(oldJson);
+        const migrated = migrate(raw);
+
+        // Write migrated data to new prefix
+        const migratedJson = JSON.stringify(migrated);
+        safeSetItem(newKey, migratedJson);
+
+        // Verify it was written successfully
+        if (safeGetItem(newKey) === migratedJson) {
+          safeRemoveItem(oldKey);
+        }
+
+        return migrated;
       } catch (e) {
         console.error(`Failed to parse save data for slot ${slot}:`, e);
         return null; // Corrupt JSON returns null, never throws
@@ -125,13 +151,16 @@ export function createSaveSystem(storage?: Storage): SaveAPI {
     },
 
     hasSave(slot = 0) {
-      const key = `${STORAGE_PREFIX}${slot}`;
-      return safeGetItem(key) !== null;
+      const newKey = `${NEW_STORAGE_PREFIX}${slot}`;
+      const oldKey = `${OLD_STORAGE_PREFIX}${slot}`;
+      return safeGetItem(newKey) !== null || safeGetItem(oldKey) !== null;
     },
 
     deleteSave(slot = 0) {
-      const key = `${STORAGE_PREFIX}${slot}`;
-      safeRemoveItem(key);
+      const newKey = `${NEW_STORAGE_PREFIX}${slot}`;
+      const oldKey = `${OLD_STORAGE_PREFIX}${slot}`;
+      safeRemoveItem(newKey);
+      safeRemoveItem(oldKey);
     },
 
     collectAutosave(player, flags, inventory, solved, world) {

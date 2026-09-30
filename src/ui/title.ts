@@ -13,7 +13,7 @@ export class TitleScreenManager {
     this.overlay.id = 'title-screen';
 
     this.overlay.innerHTML = `
-      <h1>ANTISUYU</h1>
+      <h1>Juzu</h1>
       <div class="title-menu" id="title-menu-list" style="display: none;">
         <button id="btn-new-journey">New Journey</button>
         <button id="btn-continue" style="opacity: 0.5; cursor: not-allowed;">Continue</button>
