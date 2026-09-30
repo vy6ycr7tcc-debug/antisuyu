@@ -31,7 +31,7 @@ export function getRenderCaps(renderer: THREE.WebGLRenderer | WebGPURenderer, qu
 export const CinematicShader = {
     uniforms: {
         "tDiffuse": { value: null },
-        "amount": { value: 0.005 },
+        "amount": { value: 0.0015 },
         "time": { value: 0.0 }
     },
     vertexShader: `
@@ -66,8 +66,12 @@ export const CinematicShader = {
             float b = texture2D(tDiffuse, uv - offset).b;
             vec3 col = vec3(r, g, b);
 
+            // Vignette
+            float factor = clamp(1.0 - length(uv - 0.5) * 0.55, 0.0, 1.0);
+            col *= factor;
+
             // Film Grain
-            float noise = (random(uv + mod(time, 10.0)) - 0.5) * 0.1;
+            float noise = (random(uv + mod(time, 10.0)) - 0.5) * 0.035;
             col += noise;
 
             gl_FragColor = vec4(col, 1.0);

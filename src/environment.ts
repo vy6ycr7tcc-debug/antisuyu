@@ -6,6 +6,14 @@ import { SkyMesh } from 'three/examples/jsm/objects/SkyMesh.js';
 
 import { createLightRig, LightRigConfig } from './lighting.js';
 
+declare global {
+  interface ImportMeta {
+    env: {
+      BASE_URL: string;
+    };
+  }
+}
+
 export const TOD_GRADES: Record<'day'|'dawn'|'noon'|'dusk'|'night', LightRigConfig> = {
   day: {
     sunColor: 0xFFF4E5, sunIntensity: 4.5, sunElevationDeg: 25, sunAzimuthDeg: 135,
@@ -40,7 +48,7 @@ export const TOD_GRADES: Record<'day'|'dawn'|'noon'|'dusk'|'night', LightRigConf
 };
 
 const textureLoader = new THREE.TextureLoader();
-const bakedEnvTexture = textureLoader.load('/env_baked.png');
+const bakedEnvTexture = textureLoader.load(`${import.meta.env.BASE_URL}env_baked.png`);
 bakedEnvTexture.mapping = THREE.EquirectangularReflectionMapping;
 bakedEnvTexture.colorSpace = THREE.SRGBColorSpace;
 
