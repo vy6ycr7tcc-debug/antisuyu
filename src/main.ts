@@ -12,6 +12,8 @@ import { initUI, updateUI } from './ui/index.js';
 import { ParticleSystem } from './particles.js';
 import { VolumetricLightShafts } from './volumetrics.js';
 import { CinematicShader } from './renderer.js';
+import { cloudForest } from './regions/cloudForest.js';
+import { getGlobalTerrainHeight } from './terrain.js';
 
 // Setup for global hook
 declare global {
@@ -38,6 +40,16 @@ async function init() {
   const terrainManager = createTerrain(scene);
   const river = createRiver(scene);
   const decor = createDecor(scene);
+
+  // TEMP: Load cloud forest
+  cloudForest.build({
+    scene,
+    flags: { set: () => {}, has: () => false },
+    terrainHeight: getGlobalTerrainHeight,
+    onEnterRegion: (cb) => cb(),
+    onExitRegion: () => {}
+  });
+  // END TEMP
 
   const dustParticles = new ParticleSystem(scene, 'dust');
   const leavesParticles = new ParticleSystem(scene, 'leaves');
@@ -118,12 +130,23 @@ async function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  const shot = urlParams.get('shot');
+  let shot = urlParams.get('shot');
   const tStr = urlParams.get('t');
 
   let shotMode = false;
 
   if (shot) {
+    // Check for region shot override
+    if (shot.startsWith('region:')) {
+      const shotId = shot.replace('region:', '');
+      const shotDef = cloudForest.shots.find(s => s.id === shotId);
+      if (shotDef) {
+        character.teleport(shotDef.camera.x, shotDef.camera.y, shotDef.camera.z);
+        camera.lookAt(new THREE.Vector3(shotDef.lookAt.x, shotDef.lookAt.y, shotDef.lookAt.z));
+        shotMode = true; // IMPORTANT: set shotMode to true so it triggers the __shotReady logic
+      }
+    } else {
+
     shotMode = true;
 
     // Hide UI in shot mode
@@ -154,6 +177,8 @@ async function init() {
       physics.spawnBuoyantDebris(scene, 10);
     } else {
       character.teleport(0, 0, 0);
+    }
+
     }
 
     // Fast forward

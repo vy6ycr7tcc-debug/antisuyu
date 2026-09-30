@@ -1,0 +1,17 @@
+--- src/regions/cloudForest.ts
++++ src/regions/cloudForest.ts
+@@ -49,7 +49,13 @@
+     { flag: 'q_act1_ruin_infiltrated', trigger: 'Entering the dig-site perimeter undetected' },
+     { flag: 'q_act1_quipu_solved', trigger: 'Solving the quipu cipher' }
+   ],
+-  shots: [],
++  shots: [
++    { id: 'cf_lower_blockade', camera: { x: -80, y: 15, z: -480 }, lookAt: { x: -100, y: 0, z: -500 } },
++    { id: 'cf_excavated_ruin', camera: { x: 180, y: 20, z: -270 }, lookAt: { x: 150, y: 0, z: -300 } },
++    { id: 'cf_quipu_archive', camera: { x: 150, y: -15, z: -340 }, lookAt: { x: 150, y: -20, z: -350 } },
++    { id: 'cf_cliff_staircase', camera: { x: 200, y: 5, z: 60 }, lookAt: { x: 200, y: 10, z: 80 } },
++    { id: 'cf_overview', camera: { x: 0, y: 150, z: -100 }, lookAt: { x: 150, y: 0, z: -300 } }
++  ],
+   build(api: RegionBuildAPI): void {
+     const group = new THREE.Group();
+     group.name = 'Region_CloudForest';
