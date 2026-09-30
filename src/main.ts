@@ -81,33 +81,76 @@ async function init() {
     }
   }
 
-  // Setup Post-Processing
+  // V-POST: post-processing block start
   let composer: any = null;
   let cinematicPass: any = null;
   let postProcessing: any = null;
   const isWebGPU = renderer instanceof WebGPURenderer;
   const skipPost = urlParams.get('tv') === '1';
 
+  const envMod = await import('./environment.js');
+  const gradeKey = (todParam || 'day') as keyof typeof envMod.TOD_GRADES;
+  const grade = envMod.TOD_GRADES[gradeKey] || envMod.TOD_GRADES['day'];
+
   if (!skipPost) {
       if (isWebGPU) {
           // WebGPU TSL Post Processing
-          const { pass, uv, float, vec4, Fn } = await import('three/tsl' as any);
+          const { pass, uv, float, vec4, Fn, vec2, time, fract, mod, color, toneMapping } = await import('three/tsl' as any);
           const { PostProcessing } = await import('three/webgpu');
+          const { bloom } = await import('three/examples/jsm/tsl/display/BloomNode.js');
 
           const scenePass = pass( scene, camera );
 
-          // Basic vignette via TSL
-          const vignette = Fn( ( [ color ]: [any] ) => {
+          // Full-res bloom for HIGH tier / WebGPU
+          const bloomPass = bloom(scenePass, 0.35, 0.4, 0.85);
+
+          const random = Fn(([p]: [any]) => {
+              const K1 = vec2(23.14069263277926, 2.665144142690225);
+              return fract(p.dot(K1).cos().mul(12345.6789));
+          });
+
+          const { convertToTexture } = await import('three/tsl' as any);
+
+          const cinematicNode = Fn( ( [ inputNode ]: [any] ) => {
              const uvNode = uv();
-             const dist = uvNode.sub( 0.5 ).length();
-             const factor = float( 1.0 ).sub( dist.mul( 1.2 ) ).clamp( 0.0, 1.0 );
-             return vec4( color.rgb.mul( factor ), color.a );
+             const texNode = convertToTexture(inputNode);
+
+             // Chromatic Aberration
+             const offset = vec2(0.0015, 0.0);
+             const r = texNode.sample(uvNode.add(offset)).r;
+             const g = texNode.sample(uvNode).g;
+             const b = texNode.sample(uvNode.sub(offset)).b;
+             const a = texNode.sample(uvNode).a;
+             let col = vec4(r, g, b, a);
+
+             // Vignette
+             const dist = uvNode.sub(0.5).length();
+             const factor = float(1.0).sub(dist.mul(0.55)).clamp(0.0, 1.0);
+             col = vec4(col.rgb.mul(factor), col.a);
+
+             // Film Grain - static to ensure deterministic frames for A/B convergence.
+             // Using mod(time, 0.0) or simply uv so it's always the same frame for ?shot=
+             const noise = random(uvNode).sub(0.5).mul(0.035);
+             col = vec4(col.rgb.add(noise), col.a);
+
+             return col;
           } );
 
           postProcessing = new PostProcessing( renderer as WebGPURenderer );
 
-          // Basic pass-through for WebGPU post to prove pipeline boots
-          postProcessing.outputNode = vignette(scenePass);
+          // Color Grading matching TOD_GRADES intent
+          const colorGradingNode = Fn(([inputColor]: [any]) => {
+              // Apply basic color grading tint based on ToD. This scales the colors based on sunColor and exposure.
+              const sunTint = color(grade.sunColor).mul(grade.exposure);
+              // Normalize the tint so we don't blow out the image completely
+              return vec4(inputColor.rgb.mul(sunTint).mul(float(0.8)), inputColor.a);
+          });
+
+          const cinematic = cinematicNode(bloomPass);
+          const graded = colorGradingNode(cinematic);
+
+          // Output tone mapped
+          postProcessing.outputNode = toneMapping(THREE.ACESFilmicToneMapping, grade.exposure, graded);
 
       } else {
           // WebGL2 Post Processing
@@ -121,16 +164,50 @@ async function init() {
           const renderPass = new RenderPass(scene, camera);
           composer.addPass(renderPass);
 
-          const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
+          // iPhone budget rule: Bloom at half resolution on WebGL2 fallback
+          const bloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
+          const bloomPass = new UnrealBloomPass(bloomRes, 0.35, 0.4, 0.85);
           composer.addPass(bloomPass);
 
+          // WebGL2 color grading pass matching TOD_GRADES intent
+          const colorGradingShader = {
+              uniforms: {
+                  tDiffuse: { value: null },
+                  sunColor: { value: new THREE.Color(grade.sunColor) },
+                  exposure: { value: grade.exposure }
+              },
+              vertexShader: `
+                  varying vec2 vUv;
+                  void main() {
+                      vUv = uv;
+                      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                  }
+              `,
+              fragmentShader: `
+                  uniform sampler2D tDiffuse;
+                  uniform vec3 sunColor;
+                  uniform float exposure;
+                  varying vec2 vUv;
+                  void main() {
+                      vec4 tex = texture2D(tDiffuse, vUv);
+                      vec3 graded = tex.rgb * sunColor * exposure * 0.8;
+                      gl_FragColor = vec4(graded, tex.a);
+                  }
+              `
+          };
+          const colorGradingPass = new ShaderPass(colorGradingShader);
+          composer.addPass(colorGradingPass);
+
           cinematicPass = new ShaderPass(CinematicShader);
+          // Set deterministic time for WebGL2 grain
+          cinematicPass.uniforms['time'].value = 0.0;
           composer.addPass(cinematicPass);
 
           const outputPass = new OutputPass();
           composer.addPass(outputPass);
       }
   }
+  // V-POST: post-processing block end
 
   if (physics.world) {
     // Let's add kinematic body to character
