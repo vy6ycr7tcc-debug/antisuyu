@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createNormalTexture } from './textures.js';
 
 export function createRiver(scene: THREE.Scene) {
   // A river plane running through the valley
@@ -8,7 +9,9 @@ export function createRiver(scene: THREE.Scene) {
   const geometry = new THREE.PlaneGeometry(width, length, 10, 100);
   geometry.rotateX(-Math.PI / 2);
 
+  const normalMapWater = createNormalTexture(256, 30, 2.0);
   const material = new THREE.MeshPhysicalMaterial({
+    normalMap: normalMapWater,
     color: 0x335566,
     metalness: 0.1,
     roughness: 0.1,

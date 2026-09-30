@@ -27,6 +27,7 @@ export function getGlobalTerrainHeight(x: number, z: number): number {
 
 import { physics } from './physics.js';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { createNoiseTexture, createNormalTexture } from './textures.js';
 
 export class TerrainManager {
   scene: THREE.Scene;
@@ -38,10 +39,20 @@ export class TerrainManager {
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
-    this.material = new THREE.MeshStandardMaterial({
+    const texSize = 256;
+    const roughnessMap = createNoiseTexture(texSize, 20, 3);
+    const normalMap = createNormalTexture(texSize, 20, 8.0);
+    const aoMap = createNoiseTexture(texSize, 10, 2);
+
+    this.material = new THREE.MeshPhysicalMaterial({
       vertexColors: true,
       roughness: 0.85,
+      roughnessMap: roughnessMap,
       metalness: 0.05,
+      normalMap: normalMap,
+      normalScale: new THREE.Vector2(1.5, 1.5),
+      aoMap: aoMap,
+      aoMapIntensity: 0.8,
       envMapIntensity: 1.0
     });
   }

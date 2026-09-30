@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { getGlobalTerrainHeight } from './terrain.js';
+import { createNoiseTexture, createNormalTexture } from './textures.js';
 
 export class DecorManager {
   scene: THREE.Scene;
@@ -20,7 +21,13 @@ export class DecorManager {
     // 1. Trees/Foliage (Jungle + Ichu Grass depending on biome)
     const leavesGeo = new THREE.ConeGeometry(3, 8, 8);
     leavesGeo.translate(0, 4, 0);
-    const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d4c1e, roughness: 0.9 });
+    const normalMapTree = createNormalTexture(128, 5, 2.0);
+    const leavesMat = new THREE.MeshPhysicalMaterial({
+        color: 0x2d4c1e,
+        roughness: 0.9,
+        normalMap: normalMapTree,
+        envMapIntensity: 0.5
+    });
     this.treeInstanced = new THREE.InstancedMesh(leavesGeo, leavesMat, this.treeCount);
     this.treeInstanced.castShadow = true;
     this.treeInstanced.receiveShadow = true;
@@ -28,7 +35,16 @@ export class DecorManager {
 
     // 2. Rocks
     const rockGeo = new THREE.DodecahedronGeometry(2);
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.1 });
+    const normalMapRock = createNormalTexture(128, 10, 5.0);
+    const roughMapRock = createNoiseTexture(128, 10, 4);
+    const rockMat = new THREE.MeshPhysicalMaterial({
+        color: 0x555555,
+        roughness: 0.9,
+        roughnessMap: roughMapRock,
+        metalness: 0.1,
+        normalMap: normalMapRock,
+        envMapIntensity: 1.0
+    });
     this.rockInstanced = new THREE.InstancedMesh(rockGeo, rockMat, this.rockCount);
     this.rockInstanced.castShadow = true;
     this.rockInstanced.receiveShadow = true;
