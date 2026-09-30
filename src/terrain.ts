@@ -35,6 +35,9 @@ export class TerrainManager {
   chunks: Map<string, THREE.Mesh> = new Map();
   chunkColliders: Map<string, { body: RAPIER.RigidBody, collider: RAPIER.Collider }> = new Map();
   material: THREE.Material;
+  isWebGPU: boolean = false;
+  rendererCapsSet: boolean = false;
+  maxAnisotropy: number = 4;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -55,6 +58,17 @@ export class TerrainManager {
       aoMapIntensity: 0.8,
       envMapIntensity: 1.0
     });
+  }
+
+  detectRenderer() {
+    if (this.rendererCapsSet) return;
+    this.rendererCapsSet = true;
+    try {
+       const canvas = document.querySelector('canvas');
+       if (canvas) {
+           this.isWebGPU = !!(window as any).__isWebGPU;
+       }
+    } catch(e) {}
   }
 
   getChunkKey(cx: number, cz: number): string {
@@ -120,7 +134,7 @@ export class TerrainManager {
       const px = position.getX(i);
       const pz = position.getZ(i);
 
-      const worldX = px + worldOffsetX;
+      const worldX = position.getX(i) + worldOffsetX;
       const worldZ = pz + worldOffsetZ;
 
       position.setY(i, getGlobalTerrainHeight(worldX, worldZ));
@@ -134,34 +148,60 @@ export class TerrainManager {
     const normal = new THREE.Vector3();
 
     for (let i = 0; i < position.count; i++) {
+      const px = position.getX(i);
       const pz = position.getZ(i);
       const y = position.getY(i);
 
+      const worldX = px + worldOffsetX;
       const worldZ = pz + worldOffsetZ;
 
       normal.fromBufferAttribute(geometry.attributes.normal as THREE.BufferAttribute, i);
       const slope = 1.0 - normal.dot(up);
 
-      // Biome blending
-      const isHighSierra = worldZ > 500 || y > 50;
-      const sierraBlend = Math.max(0, Math.min(1, (worldZ - 400) / 200 + Math.max(0, y - 40) / 20));
+      // Biome blending based on the bible §2.2-§2.5
+      let biome = 'cloud_forest'; // default
+      if (worldZ > 300) biome = 'high_sierra';
+      else if (worldZ < -400 && worldX < 600) biome = 'jungle_lowlands';
+      else if (worldX > 600) biome = 'paititi';
+
+      // Cloud forest damp greens
+      const cf_humus = new THREE.Color(0x3B2E22);
+      const cf_wetStone = new THREE.Color(0x5A5A58);
+
+      // Sierra gold-grass + exposed rock
+      const hs_ichuGrass = new THREE.Color(0x9A8B4F);
+      const hs_granite = new THREE.Color(0x6E6A63);
+
+      // Jungle dark humus
+      const jl_mud = new THREE.Color(0x4A3826);
+      const jl_swallowedLimestone = new THREE.Color(0xB8B0A0);
+
+      // Paititi worked-stone plazas / encroaching green
+      const pa_plazaStone = new THREE.Color(0x9A917E);
+      const pa_encroachingGreen = new THREE.Color(0x2E5A2E);
 
       if (slope > 0.4) {
-        // Rock/Scree
-        const baseRock = new THREE.Color(0x404040).lerp(new THREE.Color(0x2a2a2a), Math.random());
-        const cragRock = new THREE.Color(0x6b6660).lerp(new THREE.Color(0x4f4a45), Math.random());
-        color.copy(baseRock).lerp(cragRock, sierraBlend);
-      } else if (isHighSierra && y > 150) {
-        // Snow peaks
-        color.setHex(0xffffff).lerp(new THREE.Color(0xe0e6ed), Math.random());
-      } else if (y < 3 && worldZ < 500) {
-        // River edge mud
-        color.setHex(0x382a1d).lerp(new THREE.Color(0x281e14), Math.random());
+        // Rock on steeps
+        if (biome === 'high_sierra') {
+            color.copy(hs_granite);
+        } else if (biome === 'jungle_lowlands') {
+            color.copy(jl_swallowedLimestone);
+        } else if (biome === 'paititi') {
+            color.copy(pa_plazaStone).lerp(new THREE.Color(0xA89E86), Math.random() * 0.5);
+        } else {
+            color.copy(cf_wetStone);
+        }
       } else {
-        // Ground cover
-        const greenery = new THREE.Color(0x294218).lerp(new THREE.Color(0x3e5e26), Math.random());
-        const ichuGrass = new THREE.Color(0x8a7f45).lerp(new THREE.Color(0x6b6335), Math.random()); // Yellowish tough grass
-        color.copy(greenery).lerp(ichuGrass, sierraBlend);
+        // Soil/grass on flats
+        if (biome === 'high_sierra') {
+            color.copy(hs_ichuGrass).lerp(new THREE.Color(0x6B6335), Math.random() * 0.5);
+        } else if (biome === 'jungle_lowlands') {
+            color.copy(jl_mud);
+        } else if (biome === 'paititi') {
+            color.copy(pa_encroachingGreen).lerp(pa_plazaStone, Math.random() * 0.3);
+        } else {
+            color.copy(cf_humus).lerp(new THREE.Color(0x3E5E2A), Math.random() * 0.5);
+        }
       }
 
       colors.push(color.r, color.g, color.b);
