@@ -1,5 +1,15 @@
 import * as THREE from 'three';
 
+// Seeded RNG: Mulberry32
+function mulberry32(a: number) {
+  return function() {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
 export class ParticleSystem {
   private particles: THREE.Points;
   private positions: Float32Array;
@@ -7,30 +17,48 @@ export class ParticleSystem {
   private count: number;
 
   constructor(scene: THREE.Scene, type: 'dust' | 'leaves' | 'snow' | 'spray') {
-    this.count = 200; // Modest count
+    this.count = 200; // Default
+
+    // Seed the random number generator so particle initial positions/velocities are deterministic
+    // Using a seed specific to the type to avoid identical layout across all types
+    const seedMap = {
+      'dust': 111,
+      'leaves': 222,
+      'snow': 333,
+      'spray': 444
+    };
+    const random = mulberry32(seedMap[type] || 123);
 
     // Config based on type
     let color = 0xffffff;
     let size = 0.5;
     let spread = 100;
 
+    // Mapping 'leaves' -> 'pollen', 'snow' -> 'motes' as required by visual bible §5 and prompt
     if (type === 'dust') {
+      // Dust in sierra light
       color = 0xd0c0a0;
       size = 0.2;
       spread = 50;
+      this.count = 200;
     } else if (type === 'leaves') {
-      color = 0x4a5d23;
+      // Repurposed as pollen in jungle
+      color = 0x88aa44; // Pollen green/yellow
       size = 0.4;
       spread = 40;
+      this.count = 200;
     } else if (type === 'snow') {
+      // Repurposed as motes in cloud forest
       color = 0xffffff;
       size = 0.3;
-      spread = 200; // Sierra wide
-      this.count = 400;
+      spread = 50;
+      this.count = 200; // Restrained to 200 per iPhone budget for mist/motes
     } else if (type === 'spray') {
+      // Water spray near falls
       color = 0xccddff;
       size = 0.8;
-      spread = 30; // River localized
+      spread = 30; // Localized
+      this.count = 200;
     }
 
     // Soft radial gradient sprite
@@ -52,16 +80,22 @@ export class ParticleSystem {
     this.velocities = new Float32Array(this.count * 3);
 
     for (let i = 0; i < this.count; i++) {
-      this.positions[i * 3] = (Math.random() - 0.5) * spread;
-      this.positions[i * 3 + 1] = Math.random() * 20; // Height
-      this.positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+      this.positions[i * 3] = (random() - 0.5) * spread;
+      this.positions[i * 3 + 1] = random() * 20; // Height
+      this.positions[i * 3 + 2] = (random() - 0.5) * spread;
 
-      this.velocities[i * 3] = (Math.random() - 0.5) * 0.05;
-      this.velocities[i * 3 + 1] = (type === 'snow' ? -0.1 : -0.02) - Math.random() * 0.02;
-      this.velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.05;
+      this.velocities[i * 3] = (random() - 0.5) * 0.05;
 
-      if (type === 'leaves') {
-         this.velocities[i*3] += 0.1; // Wind bias
+      // Update vertical velocity mapping based on new type semantics
+      let verticalVel = -0.02 - random() * 0.02;
+      if (type === 'snow') verticalVel = -0.01 - random() * 0.01; // motes drift slowly
+      else if (type === 'spray') verticalVel = 0.05 + random() * 0.05; // spray goes slightly up then maybe falls (simple drift here)
+
+      this.velocities[i * 3 + 1] = verticalVel;
+      this.velocities[i * 3 + 2] = (random() - 0.5) * 0.05;
+
+      if (type === 'leaves') { // pollen
+         this.velocities[i*3] += 0.05; // Slight wind bias
       }
     }
 
@@ -84,9 +118,20 @@ export class ParticleSystem {
   update(cameraPosition: THREE.Vector3, type: 'dust' | 'leaves' | 'snow' | 'spray') {
     let spread = 100;
     if (type === 'dust') spread = 50;
-    else if (type === 'leaves') spread = 40;
-    else if (type === 'snow') spread = 200;
-    else if (type === 'spray') spread = 30;
+    else if (type === 'leaves') spread = 40; // pollen
+    else if (type === 'snow') spread = 50; // motes
+    else if (type === 'spray') spread = 30; // spray
+
+    // Use a fixed pseudo-random to deterministically respawn particles during the frame
+    // This isn't perfect since update is called sequentially, but keeping respawn deterministic
+    // is tricky if frame rates vary. Assuming fixed timestep or using a hash of index.
+    // For visual gate (shot mode), it only renders one frame usually.
+    // A simple hash function for deterministic respawn
+    const hash = (i: number) => {
+        let h = Math.imul(i ^ (i >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        return ((h ^= h >>> 16) >>> 0) / 4294967296;
+    };
 
     for (let i = 0; i < this.count; i++) {
       this.positions[i * 3] += this.velocities[i * 3];
@@ -104,9 +149,15 @@ export class ParticleSystem {
       }
 
       if (respawn) {
-        this.positions[i * 3] = cameraPosition.x + (Math.random() - 0.5) * spread;
-        this.positions[i * 3 + 1] = cameraPosition.y + 10 + Math.random() * 10;
-        this.positions[i * 3 + 2] = cameraPosition.z + (Math.random() - 0.5) * spread;
+        // Use pseudo-random hash based on index and some offset to scatter them
+        // This ensures the respawn behavior is completely deterministic across reloads.
+        const r1 = hash(i + 1000);
+        const r2 = hash(i + 2000);
+        const r3 = hash(i + 3000);
+
+        this.positions[i * 3] = cameraPosition.x + (r1 - 0.5) * spread;
+        this.positions[i * 3 + 1] = cameraPosition.y + 10 + r2 * 10;
+        this.positions[i * 3 + 2] = cameraPosition.z + (r3 - 0.5) * spread;
       }
     }
     this.particles.geometry.attributes.position.needsUpdate = true;
