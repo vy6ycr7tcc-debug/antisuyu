@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap');
+
+:root {
+  --font-title: 'Cinzel', serif;
+  --font-ui: 'Lato', sans-serif;
+  --color-text: rgba(255, 255, 255, 0.9);
+  --color-text-dim: rgba(255, 255, 255, 0.6);
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --color-accent: rgba(230, 200, 150, 0.9);
+}
+
+/* Base UI Layer */
+#ui-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  overflow: hidden;
+  z-index: 1000;
+}
+
+#ui-root button {
+  pointer-events: auto;
+  font-family: var(--font-ui);
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 1.2rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+#ui-root button:hover {
+  color: var(--color-accent);
+  transform: scale(1.05);
+}
+
+#ui-root input[type="range"] {
+  pointer-events: auto;
+}
+
+#ui-root select {
+  pointer-events: auto;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 0.5rem;
+  font-family: var(--font-ui);
+}
+
+/* Title Screen */
+#title-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  transition: opacity 1.5s ease;
+}
+
+#title-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#title-screen h1 {
+  font-family: var(--font-title);
+  font-size: 6rem;
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  margin: 0 0 2rem 0;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.8);
+  animation: slowPulse 4s infinite alternate;
+}
+
+.title-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.press-to-begin {
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  letter-spacing: 4px;
+  animation: pulseFade 2s infinite;
+  cursor: pointer;
+  margin-top: 4rem;
+}
+
+@keyframes slowPulse {
+  from { opacity: 0.9; }
+  to { opacity: 1; }
+}
+
+@keyframes pulseFade {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+/* HUD Overlay */
+#hud-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#hud-overlay.hidden {
+  opacity: 0;
+}
+
+.hud-top {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.objective-tracker {
+  text-align: right;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.objective-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-accent);
+  margin-bottom: 0.2rem;
+}
+
+.objective-text {
+  font-size: 1.2rem;
+  font-style: italic;
+}
+
+.hud-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.status-bars {
+  width: 200px;
+}
+
+.bar-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(0,0,0,0.5);
+  margin-top: 0.5rem;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+#health-fill {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+#stamina-fill {
+  background: rgba(200, 200, 200, 0.6);
+}
+
+.context-prompt {
+  font-size: 1.5rem;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.context-prompt.visible {
+  opacity: 1;
+}
+
+
+/* Pause Menu */
+#pause-menu {
+  position: absolute;
+  inset: 0;
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#pause-menu.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#pause-menu.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#pause-menu h2 {
+  font-family: var(--font-title);
+  font-size: 3rem;
+  letter-spacing: 0.2em;
+  margin-bottom: 3rem;
+}
+
+.pause-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  margin-top: 2rem;
+  border-top: 1px solid rgba(255,255,255,0.2);
+  padding-top: 2rem;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
