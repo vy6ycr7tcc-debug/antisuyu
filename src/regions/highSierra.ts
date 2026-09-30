@@ -1,15 +1,13 @@
 import * as THREE from 'three';
-// @ts-ignore
 import type { 
     RegionModule, 
     RegionBuildAPI, 
     POIDef, 
     EncounterDef, 
     QuestStageDef, 
-    RegionShotDef,
-    Vec3
+    RegionShotDef
 } from '../world/contracts.js';
-// @ts-ignore
+import { ashlarLight, granite, bronze, woodAged, caveDark, thatchIchu } from '../materials.js';
 import type { QuestFlagAPI } from '../save/questFlags.js';
 
 export const highSierra: RegionModule = {
@@ -19,7 +17,7 @@ export const highSierra: RegionModule = {
         min: { x: -450, y: 0, z: 500 }, 
         max: { x: 450, y: 300, z: 1200 } 
     },
-    pois: [
+    pois: <POIDef[]>[
         {
             id: 'hs_qenko_marker',
             name: 'Qenko Solstice Marker',
@@ -57,7 +55,7 @@ export const highSierra: RegionModule = {
             summary: 'A massive cave mouth marking the descent.'
         }
     ],
-    encounters: [
+    encounters: <EncounterDef[]>[
         {
             id: 'hs_chakana_alignment',
             position: { x: -150, y: 0, z: 750 },
@@ -86,13 +84,13 @@ export const highSierra: RegionModule = {
             notes: 'Entering outpost triggers standoff. Reaching the command crate sets confrontation flag.'
         }
     ],
-    questStages: [
+    questStages: <QuestStageDef[]>[
         { flag: 'q_act2_chakana_reached', trigger: 'first discovery of the Chakana Gate POI' },
         { flag: 'q_act2_chakana_solved', trigger: 'solving the gate alignment' },
         { flag: 'q_act2_sayhuite_solved', trigger: 'solving the map-table water routing' },
         { flag: 'q_act2_outpost_confrontation', trigger: 'entering the outpost inner perimeter' }
     ],
-    shots: [
+    shots: <RegionShotDef[]>[
         { id: 'hs_qenko_marker', camera: { x: 100, y: 10, z: 580 }, lookAt: { x: 100, y: 0, z: 600 } },
         { id: 'hs_chakana_gate', camera: { x: -150, y: 15, z: 720 }, lookAt: { x: -150, y: 5, z: 750 } },
         { id: 'hs_sayhuite_table', camera: { x: 200, y: 20, z: 870 }, lookAt: { x: 200, y: 5, z: 900 } },
@@ -101,37 +99,18 @@ export const highSierra: RegionModule = {
         { id: 'hs_overview', camera: { x: 0, y: 150, z: 600 }, lookAt: { x: 0, y: 0, z: 800 } }
     ],
     build(api: RegionBuildAPI): void {
+        const _flags: QuestFlagAPI = api.flags;
+        _flags;
         const group = new THREE.Group();
         group.name = 'Region_HighSierra';
         api.scene.add(group);
 
         // Materials (Standard PBR, no TSL, WebGL2 compatible)
-        const stoneMat = new THREE.MeshStandardMaterial({ 
-            color: 0x9e9e9e, 
-            roughness: 0.8, 
-            metalness: 0.1 
-        });
-        const carvedStoneMat = new THREE.MeshStandardMaterial({ 
-            color: 0x8a8a8a, 
-            roughness: 0.9, 
-            metalness: 0.0,
-            bumpScale: 0.05
-        });
-        const bronzeMat = new THREE.MeshStandardMaterial({ 
-            color: 0xcd7f32, 
-            roughness: 0.4, 
-            metalness: 0.8 
-        });
-        const darkCrateMat = new THREE.MeshStandardMaterial({ 
-            color: 0x2b2b2b, 
-            roughness: 0.9, 
-            metalness: 0.2 
-        });
-        const darkCaveMat = new THREE.MeshStandardMaterial({ 
-            color: 0x050505, 
-            roughness: 1.0, 
-            metalness: 0.0 
-        });
+        const stoneMat = ashlarLight();
+        const carvedStoneMat = granite();
+        const bronzeMat = bronze();
+        const darkCrateMat = woodAged();
+        const darkCaveMat = caveDark();
 
         // 1. Qenko Solstice Marker (Position: x: 100, z: 600)
         const qenkoGroup = new THREE.Group();
@@ -251,6 +230,46 @@ export const highSierra: RegionModule = {
             window.removeEventListener('keydown', handleChakanaKeyDown);
         });
         
+
+        // Milestone 2: Hard-light response
+        // Add a local directional light to simulate high-altitude harsh light on enter
+        const hsLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        hsLight.position.set(100, 200, 50);
+
+        api.onEnterRegion(() => {
+            api.scene.add(hsLight);
+        });
+        api.onExitRegion(() => {
+            api.scene.remove(hsLight);
+        });
+
+        // Milestone 2: Gold grass tones & rock/vegetation distribution
+        const ichuMat = thatchIchu(); // Inherits the #9A8B4F / #6B6335 tones
+        const grassGeo = new THREE.ConeGeometry(0.5, 2, 4);
+        grassGeo.translate(0, 1, 0);
+
+        const smallRockGeo = new THREE.DodecahedronGeometry(1.5);
+
+        // Scatter around Qenko
+        for(let i=0; i<15; i++) {
+            const grass = new THREE.Mesh(grassGeo, ichuMat);
+            grass.position.set((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
+            qenkoGroup.add(grass);
+
+            if (i % 3 === 0) {
+                const rock = new THREE.Mesh(smallRockGeo, carvedStoneMat);
+                rock.position.set((Math.random()-0.5)*25, 0.5, (Math.random()-0.5)*25);
+                qenkoGroup.add(rock);
+            }
+        }
+
+        // Scatter around Chakana
+        for(let i=0; i<15; i++) {
+            const grass = new THREE.Mesh(grassGeo, ichuMat);
+            grass.position.set((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
+            chakanaGroup.add(grass);
+        }
+
         // 3. Sayhuite Map Table (Position: x: 200, z: 900)
         const sayhuiteGroup = new THREE.Group();
         const sX = 200, sZ = 900;
@@ -343,9 +362,9 @@ export const highSierra: RegionModule = {
 
         // Ruined walls
         const wallMat = stoneMat; // Reuse stone
-        const wall1 = new THREE.Mesh(new THREE.BoxGeometry(15, 6, 2), wallMat);
+        const wall1 = new THREE.Mesh(new THREE.BoxGeometry(14.99, 5.99, 1.99), wallMat);
         wall1.position.set(-10, 3, -15);
-        const wall2 = new THREE.Mesh(new THREE.BoxGeometry(20, 5, 2), wallMat);
+        const wall2 = new THREE.Mesh(new THREE.BoxGeometry(19.99, 4.99, 1.99), wallMat);
         wall2.position.set(10, 2.5, 10);
         wall2.rotation.y = Math.PI / 2;
         outpostGroup.add(wall1, wall2);
