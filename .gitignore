@@ -1,3 +1,7 @@
 node_modules
 dist
 .DS_Store
+
+# Verification working stills (curated ones live in docs/verification/)
+shots/
+shot_*.png

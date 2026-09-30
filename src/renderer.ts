@@ -19,6 +19,12 @@ export interface RenderCaps {
   maxAnisotropy: number;
 }
 
+declare global {
+  interface Window {
+    __rendererType?: 'webgpu' | 'webgl2';
+  }
+}
+
 export function getRenderCaps(renderer: THREE.WebGLRenderer | WebGPURenderer, quality: RendererQuality): RenderCaps {
   return {
     isWebGPU: renderer instanceof WebGPURenderer,
@@ -106,7 +112,10 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     renderer.setPixelRatio(quality.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // r186 removed PCFSoftShadowMap on WebGPU — the runtime substitutes
+    // PCFShadowMap; set it explicitly so no deprecation warning prints.
+    // Shadow softness tuning continues via normalBias (§3.2).
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     if (quality.tier === 'LOW') {
        // Visual bible rule: 512 on WebGL2, 1024 on WebGPU LOW
        // (Our QUALITY_TIERS specifies 512 by default for WebGL2)
@@ -114,7 +123,9 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
        // but here we just note it.
     }
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
+    // Exposure authority is the TOD grade (visual bible §2.6); applied by
+    // environment.ts when the grade is applied. Do not hardcode here.
+    window.__rendererType = 'webgpu';
 
     return { renderer, quality };
   } catch (e) {
@@ -131,7 +142,9 @@ export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THR
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
+    // Exposure authority is the TOD grade (visual bible §2.6); applied by
+    // environment.ts when the grade is applied. Do not hardcode here.
+    window.__rendererType = 'webgl2';
 
     return { renderer, quality };
   }
