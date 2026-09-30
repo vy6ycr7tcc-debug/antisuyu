@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 // @ts-ignore
-import { ashlarLight, gold, bronze, channelClear, ashlarWeathered } from '../materials.js';
+import { ashlarLight, gold, bronze, ashlarWeathered } from '../materials.js';
 import type {
   RegionModule,
   RegionBuildAPI,
