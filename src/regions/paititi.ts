@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-// @ts-ignore
-import { ashlarLight, gold, bronze, channelClear, ashlarWeathered } from '../materials.js';
+import { ashlarLight, gold, bronze, ashlarWeathered, type RenderCaps } from '../materials.js';
+import { createWaterSurface } from '../river.js';
 import type {
   RegionModule,
   RegionBuildAPI,
@@ -85,8 +85,11 @@ export const paititi: RegionModule = {
     const goldMaterial = gold();
     const bronzeMaterial = bronze();
 
-    const waterMaterial = channelClear();
-    waterMaterial.color.setHex(0x2E5A6E); // channel clear per region script
+    const caps: RenderCaps = {
+      isWebGPU: typeof navigator !== 'undefined' && !!(navigator as unknown as { gpu?: unknown }).gpu,
+      tier: 'MEDIUM',
+      maxAnisotropy: 4
+    };
 
     // 1. The Outer Terraces
     const terracesCenter = { x: 900, z: -100 };
@@ -205,14 +208,6 @@ export const paititi: RegionModule = {
     sanctuaryGroup.add(mechanismGroup);
     paititiGroup.add(sanctuaryGroup);
 
-    // Light shaft for climax
-    const lightShaftGeo = new THREE.CylinderGeometry(4, 4, 100, 32);
-    // @ts-ignore
-    const lightShaftMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
-    const lightShaft = new THREE.Mesh(lightShaftGeo, lightShaftMat);
-    lightShaft.position.set(sanctuaryCenter.x, sanctuaryHeight + 50, sanctuaryCenter.z);
-    paititiGroup.add(lightShaft);
-
     // 4. The Aqueduct Line
     const aqueductGroup = new THREE.Group();
     const aquaductLength = 200;
@@ -227,10 +222,15 @@ export const paititi: RegionModule = {
     channelMesh.rotation.y = Math.PI / 4;
     aqueductGroup.add(channelMesh);
 
-    const waterGeo = new THREE.PlaneGeometry(2.5, aquaductLength);
-    const waterPlane = new THREE.Mesh(waterGeo, waterMaterial);
+    const waterSurface = createWaterSurface(
+      api.scene,
+      { color: 0x2E5A6E, roughness: 0.15, opacity: 1.0, flowSpeed: 0.6, flowDir: [0, 1], foamAtEdges: false },
+      2.5,
+      aquaductLength,
+      caps
+    );
+    const waterPlane = waterSurface.mesh;
     waterPlane.position.set(channelX, channelY + 1.1, channelZ);
-    waterPlane.rotation.x = -Math.PI / 2;
     waterPlane.rotation.z = Math.PI / 4;
     aqueductGroup.add(waterPlane);
 
@@ -243,11 +243,11 @@ export const paititi: RegionModule = {
     let puzzleActive = false;
     let selectedDial: 'solar' | 'lunar' = 'solar';
 
-    // @ts-ignore
+
     const checkPlayerProximity = () => {
     };
 
-    // @ts-ignore
+
     const mockPlayerEnterSanctuary = () => {
       if (!api.flags?.has('q_act4_sanctuary_confrontation')) {
         api.flags?.set('q_act4_sanctuary_confrontation');
@@ -257,18 +257,14 @@ export const paititi: RegionModule = {
         timerInterval = setInterval(() => {
           timerCount--;
           const blink = timerCount % 2 === 0;
-          // @ts-ignore
-          charges.forEach(c => c.material.color.setHex(blink ? 0xff0000 : 0x330000));
+
+          charges.forEach(c => {
+            if (c.material instanceof THREE.Material && 'color' in c.material) {
+              (c.material as any).color.setHex(blink ? 0xff0000 : 0x330000);
+            }
+          });
 
           if (timerCount <= 0) {
-            const flashGeo = new THREE.SphereGeometry(30, 32, 32);
-            // @ts-ignore
-            const flashMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.8 });
-            const flash = new THREE.Mesh(flashGeo, flashMat);
-            flash.position.set(sanctuaryCenter.x, sanctuaryHeight + 15, sanctuaryCenter.z);
-            api.scene.add(flash);
-            setTimeout(() => api.scene.remove(flash), 200);
-
             resetPuzzle();
           }
         }, 1000);
@@ -314,8 +310,6 @@ export const paititi: RegionModule = {
         charges.forEach(c => c.visible = false);
         puzzleActive = false;
 
-        lightShaftMat.opacity = 0.8;
-        
         api.flags?.set('q_act4_observatory_aligned');
       }
     };
