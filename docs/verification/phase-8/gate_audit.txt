@@ -1,0 +1,59 @@
+capture       clip>254.5  crush<10  verdict
+mc_day 1280       0.000%     0.00%     PASS
+mc_dawn 1280      0.000%     9.17%     PASS
+cc_day 1280       9.733%     0.00% FAIL (clipped>2%)
+vo_day 1280       0.000%     0.00%     PASS
+sc_base day       0.000%     0.00%     PASS
+sc_upm day        0.000%     0.00%     PASS
+sc_nb0 day        0.000%     0.00%     PASS
+sc_off day        0.000%     0.00%     PASS
+
+shadow adjudication (from p8_diff.py, full-frame):
+  base vs upm : identical (0.001% >8)  -> projection matrix was never stale in r186
+  base vs off : ~identical (0.002% >8) -> shadow contribution ~zero in-container
+  base vs nb0 : 0.469% >8              -> in-game lookup partially live, normalBias modulates it
+  minimal on/off: pixel-identical       -> canonical example also casts nothing (SwiftShader)
+  minimal on/nosun: mean|d|=85.96       -> direct lighting works; ONLY shadow sampling is dead
+
+OVERALL: FAIL
+
+pre/post diff pairs (p8_diff.py, full frame, deterministic harness — same-URL
+re-capture control diffed 0.000%):
+  mc_day   pre vs post: mean|d|=2.35  p99=12  moved>8=5.955%   (localized: terrain/wall bands, both directions — the in-game shadow lookup is partially live and normalBias modulates it; the minimal repro's lookup is fully dead)
+  mc_dawn  pre vs post: mean|d|=0.06  p99=2   moved>8=0.115%
+  cc_day   pre vs post: mean|d|=0.65  p99=10  moved>8=2.363%   (clip metric identical 9.733% both sides = p7's documented V-POST bloom-wash number)
+  vo_day   pre vs post: mean|d|=0.16  p99=4   moved>8=0.778%
+
+ adjudication chain (all measured):
+  1. shadow_check base vs &sx=upm  → pixel-identical: the ortho projection
+     matrix was ALREADY correct at runtime in three r186 (projScaleX=0.01111
+     = 2/180 exactly matches the MEDIUM ±90 bounds). The p7-flagged "stale
+     projection" hypothesis is DEAD. updateProjectionMatrix() added to
+     lighting.ts anyway as defensive hygiene (measured no-op).
+  2. shadow_check base vs &sx=off  → ~pixel-identical (0.002% >8): the
+     rendered shadow map (allocated, 81 casters, 85 receivers) contributes
+     ~zero to the final image in-container.
+  3. canonical minimal repro (public/shadow_minimal.html, same three
+     0.186.1, same browser): PCF + Basic + VSM ALL pixel-identical to
+     shadows-off; on vs nosun differs mean|d|=85.96 (70% of pixels) →
+     direct lighting works, ONLY shadow-map sampling is dead.
+  4. glRenderer = ANGLE (Google, Vulkan 1.3.0, SwiftShader Device), i.e.
+     every GL path in this container is software. Verdict: the p7-flagged
+     "cast shadows dead scene-wide" is a HEADLESS STACK LIMITATION (the
+     WebGL2 analog of the Phase 1 WebGPU device-loss), NOT a juzu code bug.
+     On-device shadow verification is OWED (parity by construction).
+
+ real config bug fixed by derivation (visual pass owed on-device):
+  - three r186 applies normalBias in WORLD METERS
+    (shadowmap_pars: worldPosition + vec4(shadowWorldNormal * shadowNormalBias, 0)).
+    normalBias=1.5 displaced the shadow-lookup point 1.5 m up: every caster
+    shorter than 1.5 m above a receiver cast nothing, and at dawn (sun elev
+    6°) the lookup shifted ~14 m horizontally. Replaced with texel-derived
+    values (2d/mapSize × 1.5): HIGH 0.176 / MEDIUM 0.264 / LOW 0.527.
+    Measured live: post-fix __shadowInfo.normalBias = 0.263671875 (MEDIUM).
+
+ flag census (from __shadowInfo.meshCensus + source grep; V-REG owners):
+  - src/regions/cloudForest.ts, highSierra.ts, jungleLowlands.ts: ZERO
+    castShadow/receiveShadow flags (paititi.ts has 7). Region props neither
+    cast nor receive — flagged to V-REG1/V-REG2, not touched here (§0
+    file ownership).

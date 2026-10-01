@@ -24,6 +24,7 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
   applyGrade(grade: keyof typeof TOD_GRADES): void;
   update(playerPos: THREE.Vector3, camera?: THREE.Camera): void;
   sun: THREE.DirectionalLight;
+  moon: THREE.DirectionalLight;
 } {
   const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
   sunLight.castShadow = true;
@@ -36,8 +37,29 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
   sunLight.shadow.camera.bottom = -d;
   sunLight.shadow.camera.near = 10;
   sunLight.shadow.camera.far = 800;
+  // Defensive: refresh the ortho projection after setting bounds. MEASURED
+  // no-op in three r186 (the rig's projScaleX already equals 2/(r−l) at
+  // runtime — p8 probe, docs/verification/phase-8/) — the p7 session flagged
+  // this call as never-made; it is now made explicitly so the correctness
+  // does not depend on r186 internals.
+  sunLight.shadow.camera.updateProjectionMatrix();
   sunLight.shadow.bias = -0.0005;
-  sunLight.shadow.normalBias = 1.5;
+  // normalBias is WORLD METERS along the receiving surface normal in three
+  // (r186 shadowmap_pars: `worldPosition + vec4(shadowWorldNormal *
+  // shadowNormalBias, 0)`). The previous 1.5 displaced the shadow-lookup
+  // point 1.5 m up: every caster shorter than 1.5 m above a receiver cast
+  // nothing, and at dawn (sun elev 6°) the lookup shifted ~14 m horizontally
+  // — contact shadows erased, terrain self-shadowing detached. Scale it to
+  // 1.5 shadow-map texels instead: texel = 2d / mapSize
+  //   HIGH   240 m / 2048 px → 0.117 m → 0.176
+  //   MEDIUM 180 m / 1024 px → 0.176 m → 0.264
+  //   LOW    180 m /  512 px → 0.352 m → 0.527
+  // Derivation, not eyeball: the headless container cannot RENDER shadows at
+  // all (p8 minimal-repro pack — SwiftShader/ANGLE-Vulkan limitation, the
+  // WebGL2 analog of the Phase 1 WebGPU device-loss), so visual confirmation
+  // of the value is OWED on-device (parity by construction).
+  const shadowTexel = (2 * d) / quality.shadowMapSize;
+  sunLight.shadow.normalBias = shadowTexel * 1.5;
   scene.add(sunLight);
   scene.add(sunLight.target);
 
@@ -51,6 +73,7 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
   moonLight.shadow.camera.bottom = sunLight.shadow.camera.bottom;
   moonLight.shadow.camera.near = sunLight.shadow.camera.near;
   moonLight.shadow.camera.far = sunLight.shadow.camera.far;
+  moonLight.shadow.camera.updateProjectionMatrix();
   moonLight.shadow.bias = sunLight.shadow.bias;
   moonLight.shadow.normalBias = sunLight.shadow.normalBias;
   scene.add(moonLight);
@@ -71,6 +94,9 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
 
   return {
     sun: sunLight,
+    // Moon exposed for verification tooling (Phase 8 &sx= shadow experiments)
+    // and future per-light diagnostics — no behavior change.
+    moon: moonLight,
     applyGrade(grade: keyof typeof TOD_GRADES) {
       const g = TOD_GRADES[grade];
       sunLight.color.setHex(g.sunColor);
