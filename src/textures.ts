@@ -650,3 +650,65 @@ export function createNormalTexture(size: number, scale: number = 10, intensity:
     tex.needsUpdate = true;
     return tex;
 }
+
+
+// Terrain surface textures (V-TERRAIN). The generic createNoiseTexture /
+// createNormalTexture above carry high-octave domain warps whose neighboring
+// texels decorrelate completely — at terrain tiling that reads as per-texel
+// white-noise speckle ("static"), not geology. These variants are strictly
+// low-frequency: broad blotch structure, no per-texel grit.
+
+// Albedo detail multiplier, 0.84–1.0 (near-white), sRGB set by caller.
+export function createTerrainDetailTexture(size: number = 256): THREE.DataTexture {
+    const actualSize = Math.min(size, 256);
+    const data = new Uint8Array(actualSize * actualSize * 4);
+    for (let y = 0; y < actualSize; y++) {
+        for (let x = 0; x < actualSize; x++) {
+            const u = x / actualSize, v = y / actualSize;
+            // Periodic sin/cos lattice → seamless tiles, broad features only.
+            const tone =
+                Math.sin(u * Math.PI * 2 * 3 + Math.sin(v * Math.PI * 2 * 2) * 1.2) * 0.5 +
+                Math.sin((u + v) * Math.PI * 2 * 5 + 1.7) * 0.25 +
+                Math.sin(u * Math.PI * 2 * 9 + v * Math.PI * 2 * 7) * 0.12;
+            const val = Math.floor(Math.min(1, Math.max(0, 0.925 + tone * 0.075)) * 255);
+            const idx = (y * actualSize + x) * 4;
+            data[idx] = val; data[idx + 1] = val; data[idx + 2] = val; data[idx + 3] = 255;
+        }
+    }
+    const tex = new THREE.DataTexture(data, actualSize, actualSize, THREE.RGBAFormat);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+    return tex;
+}
+
+// Roughness multiplier, 0.72–0.98, ~40 m blotch rhythm: the high end keeps
+// dry ground matte; the low end gives the sanctioned wet-specular patches
+// without mirror-glint whiteout under the day sun (measured in p3-5).
+export function createTerrainRoughnessTexture(size: number = 256): THREE.DataTexture {
+    const actualSize = Math.min(size, 256);
+    const data = new Uint8Array(actualSize * actualSize * 4);
+    for (let y = 0; y < actualSize; y++) {
+        for (let x = 0; x < actualSize; x++) {
+            const u = x / actualSize, v = y / actualSize;
+            const tone =
+                Math.sin(u * Math.PI * 2 * 2 + Math.sin(v * Math.PI * 2 * 3 + 0.8) * 1.5) * 0.5 +
+                Math.sin((u * 1.3 + v * 0.7) * Math.PI * 2 * 4 + 2.3) * 0.3 +
+                Math.sin(u * Math.PI * 2 * 7 - v * Math.PI * 2 * 5 + 0.4) * 0.15;
+            const val = Math.floor(Math.min(1, Math.max(0, 0.85 + tone * 0.13)) * 255);
+            const idx = (y * actualSize + x) * 4;
+            data[idx] = val; data[idx + 1] = val; data[idx + 2] = val; data[idx + 3] = 255;
+        }
+    }
+    const tex = new THREE.DataTexture(data, actualSize, actualSize, THREE.RGBAFormat);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+    return tex;
+}

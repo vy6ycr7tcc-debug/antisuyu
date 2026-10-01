@@ -219,7 +219,7 @@ async function init() {
   const todParam = urlParams.get('tod');
 
   setupEnvironment(scene, quality, renderer, todParam);
-  const terrainManager = createTerrain(scene);
+  const terrainManager = createTerrain(scene, renderCaps);
   const river = createRiver(scene);
   const decor = createDecor(scene);
 
@@ -498,6 +498,72 @@ async function init() {
       camera.lookAt(wallX, wallBase + lt, wallZ);
     } else if (shot === 'river_crossing') {
       character.teleport(0, 0, Math.PI / 2);
+    } else if (shot === 'terrain_check') {
+      // Verification-only framing (visual bible §8.1 + T8/§4.1/§2.2–2.5):
+      // biome color script, detail maps, snow line, riverbank wetness.
+      // `&v=` picks the vantage; each keeps the character near the vantage
+      // center (terrain chunks load around the CHARACTER, main.ts feeds
+      // character position to terrainManager.update) but outside the frame.
+      const v = urlParams.get('v') || 'sierra';
+      const vantages: Record<string, { cx: number; cz: number; look: [number, number] }> = {
+        // sierra: granite slopes + ichu flats (z 280–900). North aim: at
+        // dawn ANY south-of-sun aim crushes shadow-side ground (16% <10 lum
+        // measured), so the dawn capture uses sierra_lit below instead.
+        sierra: { cx: 0, cz: 620, look: [0, 800] },
+        // sierra_lit: NE-facing aim — dawn-lit slopes (0% crush measured);
+        // NOT used at day, where it faces the sun and clips 2.2% on LOW.
+        sierra_lit: { cx: -120, cz: 700, look: [-40, 920] },
+        // snowline: in-snowfield aim, captured at DAWN — at day the snow
+        // albedo (§2.3 #F2F5F7) + altitude fog + day grade white out the
+        // frame (p50 249.9, structure-free — measured p3-5); dawn's warm
+        // grade shows the blend. Also visible at altitude: a hard
+        // loaded/unloaded chunk edge into fog void (pre-existing loader
+        // cull, decor/region phases to revisit).
+        snowline: { cx: 0, cz: 930, look: [-160, 970] },
+        // riverbank: wet darkening along x≈0; stands on the EAST bank
+        // looking NORTH along it (sun-ward frames fog-wash — p3-5 probe).
+        river: { cx: 45, cz: 120, look: [10, 280] },
+        // cloud forest floor: humus + wet stone
+        cf: { cx: -60, cz: 100, look: [-140, 40] },
+        // jungle lowlands: mud + swallowed limestone (z < -400); vantage
+        // sits EAST of the river line (x≈0 is the river bed — in-bed
+        // cameras whiteout on water+fog, measured p3-5), look ~65 m out so
+        // fog-dense distance stays out of frame.
+        jungle: { cx: 60, cz: -560, look: [-10, -620] },
+        // paititi: north-along-flank aim (the height function makes x>600 a
+        // vast smooth dome — no plaza flats until V-REG2 structures;
+        // south aims face the day sun and clip ~27%, measured p3-5).
+        // A faint chunk-seam sun-bleed streak may show (pre-existing
+        // LOD T-junction crack — see worklog/PR observation).
+        paititi: { cx: 680, cz: -40, look: [740, 90] },
+        // boundary: cloud→sierra transition band — must blend, not seam.
+        // North aim keeps the day sun out of frustum (east aim clipped
+        // 11.3% on fog glow, measured p3-5); gradient reads in depth.
+        boundary: { cx: -40, cz: 280, look: [0, 460] }
+      };
+      const vant = vantages[v] || vantages.sierra;
+      // Generic override for verification iteration (p3-5): &cx=&cz=&lx=&lz=
+      const num = (k: string, d: number) => {
+        const s = urlParams.get(k);
+        return s === null ? d : parseFloat(s);
+      };
+      const VX = { cx: num('cx', vant.cx), cz: num('cz', vant.cz), lx: 0, lz: 0 };
+      VX.lx = num('lx', vant.look[0]);
+      VX.lz = num('lz', vant.look[1]);
+      const camDist = 26, camH = 15;
+      const [lx, lz] = [VX.lx, VX.lz];
+      const dx = lx - VX.cx, dz = lz - VX.cz;
+      const dl = Math.max(0.001, Math.hypot(dx, dz));
+      const ux = dx / dl, uz = dz / dl;
+      const camX = VX.cx - ux * camDist, camZ = VX.cz - uz * camDist;
+      // Character parks 10 m BEHIND the camera: near enough for the chunk
+      // loader (which follows the character), behind the frustum so the
+      // frame is terrain-only (blocky character is Phase 7's audit).
+      character.teleport(camX - ux * 10, camZ - uz * 10, 0);
+      character.disableCameraUpdate = true;
+      const camY = getGlobalTerrainHeight(camX, camZ) + camH;
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2, lz);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
       character.disableCameraUpdate = true;
