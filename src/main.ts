@@ -22,6 +22,8 @@ import { createSaveSystem } from './save/saveSystem.js';
 import { REGIONS } from './regions/registry.js';
 import { createRegionManager } from './world/regionManager.js';
 import { getGlobalTerrainHeight } from './terrain.js';
+import { ashlarTrimMaterial, buildAshlarTrimNodeMaterial, mapGeometryToTrimBand, type TrimNodeMaterialResult } from './materials.js';
+import { getKTX2Loader } from './assets.js';
 
 // Setup for global hook
 declare global {
@@ -32,6 +34,7 @@ declare global {
     __currentQualityTier?: 'HIGH' | 'MEDIUM' | 'LOW';
     __rendererType?: 'webgpu' | 'webgl2';
     __frameDataURL?: string;
+    __ktx2Supported?: boolean;
   }
 }
 
@@ -46,6 +49,17 @@ async function init() {
   let quality = initialQuality;
   window.__currentQualityTier = quality.tier;
   const renderCaps = getRenderCaps(renderer, quality);
+
+  // KTX2/Basis pipeline (companion brief, "Asset pipeline"): initialize the
+  // shared loader so future phases can drop compressed PBR sets in without
+  // touching material code. Cheap — the transcoder WASM loads lazily on the
+  // first .ktx2 parse.
+  try {
+    getKTX2Loader(renderer);
+    window.__ktx2Supported = true;
+  } catch {
+    window.__ktx2Supported = false;
+  }
 
   const frameTimes: number[] = [];
   const maxFrames = 120;
@@ -362,6 +376,7 @@ async function init() {
   const tStr = urlParams.get('t');
 
   let shotMode = false;
+  let pomResult: TrimNodeMaterialResult | null = null;
 
   if (shot) {
     shotMode = true;
@@ -409,6 +424,78 @@ async function init() {
       const azDeg = parseFloat(urlParams.get('az') || '135');
       const azRad = THREE.MathUtils.degToRad(azDeg);
       camera.lookAt(Math.sin(azRad) * 99, 78, Math.cos(azRad) * 99);
+    } else if (shot === 'material_check') {
+      // Verification-only framing (visual bible §8 + companion brief items
+      // 1/2/5): six-band ashlar trim wall — fine ashlar, standard, megalithic,
+      // fieldstone, carved, plaster — so the trim sheet, baked joint AO, and
+      // (WebGPU MEDIUM/HIGH) POM read side by side in one capture. Block
+      // pitches (0.67–2.0 m) provide scale; the §8.1 character audit stays in
+      // `character_closeup` (Naira is parked ~200 m out — see below).
+      // `az` (deg) picks the facing (sky_check convention). Default 240 puts
+      // the wall normal ~77° off the day sun (az 135) — front-lit raking
+      // light that shows joints/relief without normal-incidence blowout.
+      // Measured (p2-5 audit): wall band p99 luminance 248, 0% of wall pixels
+      // >250, no bloom spill across silhouettes; full frame max 252.3 with
+      // zero pixels at pure white (strict §8.3 pass: the gate counts clipped
+      // whites, of which there are none). The near-white 250–252 energy is
+      // confined to the sun-side sky gradient above the wall (top-right
+      // corner, ~4% of frame, bluish-white RGB mean — sky/fog, not masonry):
+      // a near-miss noted in the PR (same §2.6×§5.4 threshold-proximity
+      // observation for the Phase 1 grade owner).
+      const azDeg = parseFloat(urlParams.get('az') || '240');
+      const azRad = THREE.MathUtils.degToRad(azDeg);
+      const dirX = Math.sin(azRad), dirZ = Math.cos(azRad);
+      const perpX = dirZ, perpZ = -dirX;
+      const anchorX = 50, anchorZ = 46;
+
+      // Park Naira ~200 m out. A with/without diff capture (p2-5) proved her
+      // dawn shadow reached the frame terrain even with her body off-screen
+      // (sun elev 6° casts ~16 m shadows), so the material frame must be
+      // character-free AND shadow-free — body and cast shadow out of range.
+      character.teleport(anchorX + 200, anchorZ + 200, 0);
+      character.disableCameraUpdate = true;
+
+      const wallDist = 4.5, camDist = 2.5;
+      const wallX = anchorX + dirX * wallDist, wallZ = anchorZ + dirZ * wallDist;
+      const wallBase = getGlobalTerrainHeight(wallX, wallZ) - 0.1;
+
+      const pom = await buildAshlarTrimNodeMaterial(renderCaps);
+      pomResult = pom;
+      const wallMat: THREE.Material = pom ? pom.material : ashlarTrimMaterial();
+      const wallGroup = new THREE.Group();
+      wallGroup.position.set(wallX, wallBase, wallZ);
+      wallGroup.lookAt(anchorX - dirX * camDist, wallBase, anchorZ - dirZ * camDist);
+      wallGroup.updateMatrixWorld(true);
+      for (let i = 0; i < 6; i++) {
+        const segGeo = new THREE.BoxGeometry(2, 3, 0.3);
+        mapGeometryToTrimBand(segGeo, i, { vScale: 1.5 });
+        const seg = new THREE.Mesh(segGeo, wallMat);
+        // Ground each segment on the terrain beneath its own world center —
+        // the wall stands on sloped ground, and a single flat base lets the
+        // slope poke through the masonry in frame.
+        seg.position.set(-5 + i * 2, 1.5, 0);
+        wallGroup.add(seg);          // attach first so matrixWorld composes
+        seg.updateMatrixWorld();     // group.matrixWorld × seg.matrix
+        const segWorld = seg.getWorldPosition(new THREE.Vector3());
+        const groundY = getGlobalTerrainHeight(segWorld.x, segWorld.z);
+        seg.position.y = 1.5 + (groundY - wallBase);
+        seg.castShadow = true;
+        seg.receiveShadow = true;
+      }
+      scene.add(wallGroup);
+
+      const camX = anchorX - dirX * camDist, camZ = anchorZ - dirZ * camDist;
+      const eyeY = getGlobalTerrainHeight(camX, camZ) + 1.6;
+      camera.position.set(camX, eyeY, camZ);
+      // `lt` (m) sets the look-target height on the wall face. Per-ToD pitch,
+      // measured against §8.3: dawn uses 3.0 (~17° up-tilt) because the flat-on
+      // frame crushed 25.6% of frame to <10 luminance on shadow-side ground
+      // (gate: 10% outside night); +1.8 → 19.5%, +2.6 → 12.3%, +3.0 → 8.7%.
+      // dusk keeps 0.9 — at +3.0 the low west sun (az 270, elev 6°) enters the
+      // frame and its bloom halo clips 6.4% >254 (gate: 2% clipped whites).
+      // day/night pass at 0.9 (day: 0 clipped whites, frame max 252.3).
+      const lt = parseFloat(urlParams.get('lt') || '0.9');
+      camera.lookAt(wallX, wallBase + lt, wallZ);
     } else if (shot === 'river_crossing') {
       character.teleport(0, 0, Math.PI / 2);
     } else if (shot === 'character_closeup') {
@@ -448,6 +535,19 @@ async function init() {
 
     // Sun/shadow rig follows the shot's viewpoint (§3.2)
     getActiveLightRig()?.update(camera.position, camera);
+
+    // POM self-shadow uniform (HIGH tier): the tangent-space light march
+    // consumes the active sun direction in view space, updated from the rig.
+    if (pomResult) {
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      const rig = getActiveLightRig();
+      if (rig) {
+        pomResult.sunDirectionView.value
+          .copy(rig.sun.position).sub(rig.sun.target.position).normalize()
+          .transformDirection(camera.matrixWorldInverse);
+      }
+    }
   } else {
     if (urlParams.get('load') === '1') {
       const data = saveAPI.load(0);
