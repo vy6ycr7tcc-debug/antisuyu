@@ -3,7 +3,8 @@ import { InputManager } from './input.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { physics } from './physics.js';
 import { getGlobalTerrainHeight } from './terrain.js';
-import { skinNaira, clothField, hairDark, leatherDark } from './materials.js';
+import { skinNaira, clothField, clothFieldDark, hairDark, leatherDark } from './materials.js';
+import { createMistTexture } from './textures.js';
 
 export enum MovementState {
   WALK = 'WALK',
@@ -58,11 +59,12 @@ export class CharacterController {
     // Skin with subsurface scattering approximation
     const skinMat = skinNaira();
 
-    // Cloth PBR (weather-worn field clothing)
+    // Cloth PBR (weather-worn field clothing) — jacket tone
     const clothMat = clothField();
 
-    // Pants (tough fabric)
-    const pantsMat = clothField();
+    // Pants (tough fabric) — p7: darker ground-grime tone (was the same
+    // clothField() olive as the torso: the costume read as a green bodysuit)
+    const pantsMat = clothFieldDark();
 
     // Gear (leather/straps)
     const gearMat = leatherDark();
@@ -95,6 +97,7 @@ export class CharacterController {
     const braidGeo = new THREE.TubeGeometry(braidPath, 8, 0.03, 8, false);
     const hairMat = hairDark();
     const braid = new THREE.Mesh(braidGeo, hairMat);
+    braid.castShadow = true;
     head.add(braid);
 
     this.mesh.add(head);
@@ -104,31 +107,56 @@ export class CharacterController {
     // Move pivot to top of leg
     legGeo.translate(0, -0.4, 0);
 
+    // Boots (p7 costume zoning): leather over the lower leg, extending 2 cm
+    // below the leg end so the boot embeds into sloped ground — mitigates the
+    // "legs end mid-air on a downslope" read of the center-point terrain snap
+    // (the snap itself is the shared height function; geometry/rig stays).
+    const bootGeo = new THREE.CylinderGeometry(0.07, 0.082, 0.26, 12);
+    bootGeo.translate(0, -0.71, 0);
+    const bootMat = leatherDark();
+
     this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
     this.leftLeg.position.set(-0.11, 0.8, 0);
     this.leftLeg.castShadow = true;
+    const leftBoot = new THREE.Mesh(bootGeo, bootMat);
+    leftBoot.castShadow = true;
+    this.leftLeg.add(leftBoot);
     this.mesh.add(this.leftLeg);
 
     this.rightLeg = new THREE.Mesh(legGeo, pantsMat);
     this.rightLeg.position.set(0.11, 0.8, 0);
     this.rightLeg.castShadow = true;
+    const rightBoot = new THREE.Mesh(bootGeo, bootMat);
+    rightBoot.castShadow = true;
+    this.rightLeg.add(rightBoot);
     this.mesh.add(this.rightLeg);
 
-    // Arms (~0.6m)
+    // Arms (~0.6m) — pivot at the top; skin forearm/hand below the sleeve
     const armGeo = new THREE.CylinderGeometry(0.06, 0.045, 0.6, 16);
     // Move pivot to top of arm
     armGeo.translate(0, -0.3, 0);
 
-    // Sleeves use clothMat, hands use skinMat (simplified as just using skinMat for now or a mixed approach)
-    // To keep rig intact, we'll just use skinMat for arms to represent exposed skin / tight sleeves
+    // Sleeves (p7 costume zoning): the arms were FULL skin cylinders ("tight
+    // sleeves" comment, never implemented) — she read bare-armed. A cloth
+    // sleeve shell over the upper arm keeps the animated arm mesh untouched;
+    // the forearm/hand below stays skin.
+    const sleeveGeo = new THREE.CylinderGeometry(0.068, 0.056, 0.3, 16);
+    sleeveGeo.translate(0, -0.15, 0);
+
     this.leftArm = new THREE.Mesh(armGeo, skinMat);
     this.leftArm.position.set(-0.28, 1.3, 0);
     this.leftArm.castShadow = true;
+    const leftSleeve = new THREE.Mesh(sleeveGeo, clothMat);
+    leftSleeve.castShadow = true;
+    this.leftArm.add(leftSleeve);
     this.mesh.add(this.leftArm);
 
     this.rightArm = new THREE.Mesh(armGeo, skinMat);
     this.rightArm.position.set(0.28, 1.3, 0);
     this.rightArm.castShadow = true;
+    const rightSleeve = new THREE.Mesh(sleeveGeo, clothMat);
+    rightSleeve.castShadow = true;
+    this.rightArm.add(rightSleeve);
     this.mesh.add(this.rightArm);
 
     scene.add(this.mesh);
@@ -176,8 +204,13 @@ export class CharacterController {
   public body: RAPIER.RigidBody | null = null;
   public collider: RAPIER.Collider | null = null;
 
-  // Breath particles
-  private breathParticles: THREE.Mesh[] = [];
+  // Breath particles — p7: seeded deterministic spawn (the old Math.random()
+  // violated the J7 determinism discipline every other system was fixed for)
+  // and soft normal-blended sprites (the p4 mist lesson: unlit white MeshBasic
+  // spheres read as glow blobs — §4.4 spirit).
+  private breathParticles: THREE.Sprite[] = [];
+  private breathAccum = 0;
+  private breathMat: THREE.SpriteMaterial | null = null;
 
   public update(dt: number) {
     this.stateTimer += dt;
@@ -295,8 +328,12 @@ export class CharacterController {
     if (this.state !== MovementState.CLIMB && this.state !== MovementState.ROPE_SWING) {
         let h = this.getTerrainHeightAndNormal(this.mesh.position.x, this.mesh.position.z).y;
 
-        // Raycast down to find physics colliders (like the rope bridge)
-        const physHeight = physics.raycastDown(this.mesh.position.x, this.mesh.position.y + 2.0, this.mesh.position.z, 5.0);
+        // Raycast down to find physics colliders (like the rope bridge).
+        // Excludes her OWN kinematic capsule — without the exclusion the probe
+        // hits it (origin is 2 m up, capsule top at +0.9 m) and she levitates
+        // +0.9 m per update step (p7 measured; broke character_closeup framing
+        // and every gameplay frame after the first physics step).
+        const physHeight = physics.raycastDown(this.mesh.position.x, this.mesh.position.y + 2.0, this.mesh.position.z, 5.0, this.body ?? undefined);
         if (physHeight !== null && physHeight > h) {
             h = physHeight;
         }
@@ -324,14 +361,25 @@ export class CharacterController {
     // Breath vapor effect for high sierra
     const isHighSierra = this.mesh.position.z > 500 || this.mesh.position.y > 50;
     if (isHighSierra) {
-      if (Math.random() < 0.1) { // spawn rate
-         const breathGeo = new THREE.SphereGeometry(0.1, 4, 4);
-         const breathMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
-         const breath = new THREE.Mesh(breathGeo, breathMat);
-         // Position roughly at head
-         breath.position.copy(this.mesh.position).add(new THREE.Vector3(0, 1.8, 0.5).applyAxisAngle(new THREE.Vector3(0,1,0), this.mesh.rotation.y));
-         this.mesh.parent?.add(breath);
-         this.breathParticles.push(breath);
+      // Deterministic spawn clock: ~6/s (the old 10%-per-frame rate at 60 fps)
+      // driven purely by dt — identical sequences for identical ?t=.
+      this.breathAccum += dt * 6;
+      while (this.breathAccum >= 1) {
+        this.breathAccum -= 1;
+        if (!this.breathMat) {
+          this.breathMat = new THREE.SpriteMaterial({
+            map: createMistTexture(),
+            transparent: true,
+            opacity: 0.35,
+            depthWrite: false,
+          });
+        }
+        const breath = new THREE.Sprite(this.breathMat);
+        breath.scale.setScalar(0.12);
+        // Position roughly at head
+        breath.position.copy(this.mesh.position).add(new THREE.Vector3(0, 1.8, 0.5).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y));
+        this.mesh.parent?.add(breath);
+        this.breathParticles.push(breath);
       }
     }
 
@@ -341,13 +389,10 @@ export class CharacterController {
         p.position.y += dt * 1.5;
         p.position.z += dt * 0.5 * Math.cos(this.mesh.rotation.y); // drift forward slightly
         p.position.x += dt * 0.5 * Math.sin(this.mesh.rotation.y);
-        const mat = p.material as THREE.MeshBasicMaterial;
-        mat.opacity -= dt * 0.5;
+        p.material.opacity -= dt * 0.5;
         p.scale.addScalar(dt * 2.0);
-        if (mat.opacity <= 0) {
+        if (p.material.opacity <= 0) {
             p.parent?.remove(p);
-            p.geometry.dispose();
-            mat.dispose();
             this.breathParticles.splice(i, 1);
         }
     }
@@ -409,6 +454,12 @@ export class CharacterController {
 
   public teleport(x: number, z: number, theta: number = 0) {
     this.mesh.position.set(x, this.getTerrainHeightAndNormal(x, z).y, z);
+    // p7: callers pass theta as a FACING (rockslide: "position character
+    // looking at the slope", shot overrides &ry=) — the old code only set the
+    // orbit-camera theta and never touched mesh.rotation.y, so every teleported
+    // facing silently no-opped (she always faced +z; the pack/braid framing
+    // could not be captured).
+    this.mesh.rotation.y = theta;
     this.theta = theta;
     this.updateCamera();
   }

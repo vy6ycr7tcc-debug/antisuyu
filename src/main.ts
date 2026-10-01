@@ -22,7 +22,7 @@ import { createSaveSystem } from './save/saveSystem.js';
 import { REGIONS } from './regions/registry.js';
 import { createRegionManager } from './world/regionManager.js';
 import { getGlobalTerrainHeight } from './terrain.js';
-import { ashlarTrimMaterial, buildAshlarTrimNodeMaterial, mapGeometryToTrimBand, type TrimNodeMaterialResult } from './materials.js';
+import { ashlarTrimMaterial, buildAshlarTrimNodeMaterial, mapGeometryToTrimBand, setCharacterDetailMapsEnabled, type TrimNodeMaterialResult } from './materials.js';
 import { getKTX2Loader } from './assets.js';
 
 // Setup for global hook
@@ -36,6 +36,9 @@ declare global {
     __frameDataURL?: string;
     __ktx2Supported?: boolean;
     __atmosDebug?: { dust: THREE.Points; pollen: THREE.Points; motes: THREE.Points };
+    __charDebug?: {
+      pos: THREE.Vector3; rotY: number; visible: boolean; state: string; camPos: THREE.Vector3;
+    };
   }
 }
 
@@ -271,6 +274,11 @@ async function init() {
 
   // touch controls block
   const touchControls = new TouchControls(input);
+
+  // p7 gate A/B suspension (&ncm=1): construct the character with the detail
+  // maps disabled — the flat pre-p7 surface read for the wiring A/B pair
+  // (same discipline as &np/&nv/&nm; must be set BEFORE construction).
+  if (urlParams.get('ncm') === '1') setCharacterDetailMapsEnabled(false);
 
   const character = new CharacterController(scene, camera, input);
 
@@ -789,10 +797,27 @@ async function init() {
       // Biome gate follows the vantage (generic &rg= still wins below).
       if (!urlParams.get('rg')) urlParams.set('rg', vant.rg);
     } else if (shot === 'character_closeup') {
-      character.teleport(50, 50, 0);
+      // V-CHAR material audit framing. Defaults keep the canonical framing
+      // (2 m face-on at the torso); generic overrides follow the p3/p4/p5
+      // pattern (all optional, all measured in the p7 evidence):
+      //   cx/cz — character ground position (default 50, 50)
+      //   cd    — camera distance south of the character (default 2 m)
+      //   ch    — camera height above the character's ground (default 1.5 m)
+      //   ly    — look-target height above the character's ground (default 1.0 m)
+      //   ry    — character facing (radians, default 0 = toward the +z camera)
+      //   nc=1  — hide the character (presence A/B: proves what pixels are hers)
+      const num = (k: string, d: number) => {
+        const s = urlParams.get(k);
+        return s === null ? d : parseFloat(s);
+      };
+      const cx = num('cx', 50), cz = num('cz', 50);
+      const cd = num('cd', 2), ch = num('ch', 1.5), ly = num('ly', 1.0), ry = num('ry', 0);
+      character.teleport(cx, cz, ry);
       character.disableCameraUpdate = true;
-      camera.position.set(50, character.mesh.position.y + 1.5, character.mesh.position.z + 2);
-      camera.lookAt(50, character.mesh.position.y + 1.0, character.mesh.position.z);
+      if (urlParams.get('nc') === '1') character.mesh.visible = false;
+      const gy = character.mesh.position.y;
+      camera.position.set(cx, gy + ch, cz + cd);
+      camera.lookAt(cx, gy + ly, cz);
     } else if (shot === 'rockslide') {
       const startX = 200;
       const startZ = 0;
@@ -1019,6 +1044,15 @@ async function init() {
     }
 
     setTimeout(() => {
+      // V-CHAR probe (same discipline as __rendererType/__atmosDebug): lets the
+      // §8 harness assert the character's final runtime state in shot mode.
+      window.__charDebug = {
+        pos: character.mesh.position.clone(),
+        rotY: character.mesh.rotation.y,
+        visible: character.mesh.visible,
+        state: character.state,
+        camPos: camera.position.clone(),
+      };
       window.__shotReady = true;
     }, 100);
   } else {
