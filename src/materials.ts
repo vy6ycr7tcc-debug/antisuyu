@@ -1,8 +1,32 @@
 import * as THREE from 'three';
-import { createNoiseTexture, createNormalTexture } from './textures.js';
+import {
+  createNoiseTexture,
+  createNormalTexture,
+  createAshlarTrimSheet,
+  createSkinDetailTexture,
+  createClothWeaveTexture,
+  createHairStrandTexture,
+  TRIM_BAND_COUNT,
+  type TrimSheetMaps
+} from './textures.js';
+import type { MeshStandardNodeMaterial } from 'three/webgpu';
+
+// ============================================================================
+// V-MAT — the shared material library (visual bible §4.2 / §7.4).
+//
+// Every factory returns a NEW material instance (callers may tweak per-mesh).
+// All parameter values live inside the §4.1 PBR ranges; §2 palette hexes are
+// the albedo defaults. No caller may set `.emissive` except via lampEmissive()
+// (§4.4 anti-glow law). This module imports textures only from textures.ts;
+// it never imports renderer state.
+// ============================================================================
+
 export interface RenderCaps { isWebGPU: boolean; tier: 'HIGH' | 'MEDIUM' | 'LOW'; maxAnisotropy: number; }
 
-// Cache for procedural textures to avoid recreating them for every material instance
+// --- shared texture caches ----------------------------------------------------
+// Procedural textures are generated once and shared across every material
+// instance (DataTexture upload is per-TEXTURE, so sharing keeps VRAM flat).
+
 const textureCache = {
     noise: null as THREE.DataTexture | null,
     normal: null as THREE.DataTexture | null,
@@ -22,91 +46,238 @@ function getNormalMap(): THREE.DataTexture {
     return textureCache.normal;
 }
 
-let WEBGPU: any = null;
+// ============================================================================
+// Ashlar trim sheet (companion brief items 1/2/5 — visual bible §4.3).
+//
+// ONE 1536² sheet carries six vertical masonry bands (fine ashlar → plaster).
+// Band selection is GEOMETRY-side: consumers rewrite their UVs into the band
+// with mapGeometryToTrimBand() — the textures carry no offset/repeat so a
+// single GPU copy serves every wall in the game.
+//
+// The ORMH texture packs AO (R), roughness (G), metalness (B), height (A).
+// On the standard path the baked normal map carries the relief ("baked deep
+// normal maps as fallback", brief item 2); on the WebGPU node path the height
+// channel drives parallax occlusion mapping with heightfield self-shadowing
+// (MEDIUM: 16 linear steps; HIGH: 24 steps + binary refinement + 8-step
+// light march — the brief's tier table).
+// ============================================================================
 
-async function loadWebGPU() {
-    if (!WEBGPU) {
-        try {
-           WEBGPU = await import('three/webgpu' as any);
-        } catch(e) {
-           console.error("Failed to load three/webgpu", e);
-        }
-    }
-    return WEBGPU;
+let trimSheetCache: TrimSheetMaps | null = null;
+
+function getTrimSheet(): TrimSheetMaps {
+  if (!trimSheetCache) {
+    trimSheetCache = createAshlarTrimSheet(1536);
+    // ORMH feeds aoMap + roughnessMap + metalnessMap from the SAME texture.
+    // aoMap would default to uv1; pin every slot to channel 0 (the trim-mapped
+    // uv) so geometry needs a single uv attribute.
+    trimSheetCache.ormh.channel = 0;
+  }
+  return trimSheetCache;
 }
 
-// Material factories will be implemented below
+/**
+ * Rewrites `geometry`'s uv attribute so u lands inside trim band `band`
+ * (u ∈ [band/6, (band+1)/6]) while v tiles freely (sheet v is
+ * wall-base → top with the §4.3.3 weathering gradient baked along it).
+ * Call AFTER geometry creation, BEFORE first render. Returns the geometry
+ * for chaining.
+ */
+export function mapGeometryToTrimBand(
+  geometry: THREE.BufferGeometry,
+  band: number,
+  opts: { vScale?: number; vOffset?: number } = {}
+): THREE.BufferGeometry {
+  const uvAttr = geometry.getAttribute('uv');
+  if (!uvAttr) return geometry;
+  const u0 = band / TRIM_BAND_COUNT;
+  const vScale = opts.vScale ?? 1;
+  const vOffset = opts.vOffset ?? 0;
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    uvAttr.setXY(i, u0 + THREE.MathUtils.clamp(u, 0, 1) / TRIM_BAND_COUNT, v * vScale + vOffset);
+  }
+  uvAttr.needsUpdate = true;
+  return geometry;
+}
 
-// --- Stone / Masonry ---
+/**
+ * Standard-path ashlar trim material (WebGL2 always; WebGPU LOW tier).
+ * The sheet's baked normal map carries the relief; ORMH drives AO/rough/metal.
+ */
+export function ashlarTrimMaterial(): THREE.MeshStandardMaterial {
+  const sheet = getTrimSheet();
+  return new THREE.MeshStandardMaterial({
+    color: 0xFFFFFF,        // albedo anchors live IN the sheet (§2 hexes)
+    map: sheet.albedo,
+    normalMap: sheet.normal,
+    roughnessMap: sheet.ormh,   // scalar 1.0 → G channel passes through
+    metalnessMap: sheet.ormh,   // B channel is 0 for stone
+    aoMap: sheet.ormh,          // baked cavity AO in the joints (§4.3.2)
+    aoMapIntensity: 0.8,        // §4.1 range 0.6–1.0
+    roughness: 1.0,
+    metalness: 1.0,
+    envMapIntensity: 1.0,
+  });
+}
 
-// Ashlar light (Paititi primary stone, sunlit faces)
+// --- WebGPU node path: POM + self-shadowing (brief item 2, tier table) -------
+
+export interface TrimNodeMaterialResult {
+  material: MeshStandardNodeMaterial;
+  /** View-space direction TOWARD the active sun/moon. The consumer copies
+   *  the light-rig direction into `.value` once per frame (transformDirection
+   *  by the camera view matrix). Only used by the HIGH-tier shadow march. */
+  sunDirectionView: { value: THREE.Vector3 };
+  pomSteps: number;
+}
+
+/**
+ * WebGPU node material for the ashlar trim sheet with parallax occlusion
+ * mapping. Returns null when the tier cannot afford POM (LOW tier, or any
+ * failure while building the node graph) — callers must fall back to
+ * ashlarTrimMaterial().
+ *
+ * TSL is dynamically imported here only, inside the WebGPU branch (§5.3).
+ */
+export async function buildAshlarTrimNodeMaterial(
+  caps: RenderCaps,
+  opts: { heightScale?: number } = {}
+): Promise<TrimNodeMaterialResult | null> {
+  if (!caps.isWebGPU || caps.tier === 'LOW') return null;
+
+  try {
+    const [WEBGPU, TSL] = await Promise.all([
+      import('three/webgpu'),
+      import('three/tsl'),
+    ]);
+    const {
+      uv, texture, float, vec3,
+      normalize, max, mix,
+      Loop, If, Break,
+      dFdx, dFdy, positionView, normalView,
+      normalMap, uniform,
+    } = TSL;
+
+    const sheet = getTrimSheet();
+    const heightScaleNode = float(opts.heightScale ?? 0.03);
+
+    const material = new WEBGPU.MeshStandardNodeMaterial();
+    material.envMapIntensity = 1.0;
+
+    // Band UV is geometry-side: uv.x already lands inside the band.
+    const uv0 = uv();
+
+    // --- tangent frame (Mikkelsen screen-space derivatives) ------------------
+    // Trim-mapped geometry carries no tangent attribute; the classic
+    // cotangent frame reconstructs the TBN from screen-space derivatives of
+    // position and uv, evaluated at the top level (uniform control flow).
+    const dp1 = dFdx(positionView);
+    const dp2 = dFdy(positionView);
+    const duv1 = dFdx(uv0);
+    const duv2 = dFdy(uv0);
+    const dp2perp = dp2.cross(dp1);
+    const dp1perp = dp1.cross(dp2);
+    const tDir = dp2perp.mul(duv1.x).add(dp1perp.mul(duv2.x)).normalize();
+    const bDir = dp2perp.mul(duv1.y).add(dp1perp.mul(duv2.y)).normalize();
+    const nDir = normalize(normalView);
+
+    const viewDirV = normalize(positionView.negate());
+    const viewTs = vec3(tDir.dot(viewDirV), bDir.dot(viewDirV), nDir.dot(viewDirV)).toVar();
+
+    // Total parallax offset per unit of heightfield depth.
+    const parallax = viewTs.xy.div(max(viewTs.z, 0.08)).mul(heightScaleNode).toVar();
+
+    // --- linear search (MEDIUM 16 / HIGH 24) ---------------------------------
+    const steps = caps.tier === 'HIGH' ? 24 : 16;
+    const layerDepth = float(1.0 / steps);
+    const depth = float(0).toVar();
+    const h = texture(sheet.ormh, uv0).a.toVar();
+
+    Loop(steps, () => {
+      If(h.lessThanEqual(depth), () => { Break(); });
+      depth.addAssign(layerDepth);
+      h.assign(texture(sheet.ormh, uv0.sub(parallax.mul(depth))).a);
+    });
+
+    // --- binary refinement (HIGH only) ---------------------------------------
+    const depthFinal = depth;
+    if (caps.tier === 'HIGH') {
+      const lo = depth.sub(layerDepth).toVar();
+      const hi = depth.toVar();
+      Loop(5, () => {
+        const mid = lo.add(hi).mul(0.5);
+        const hMid = texture(sheet.ormh, uv0.sub(parallax.mul(mid))).a;
+        If(hMid.greaterThan(mid), () => { lo.assign(mid); }).Else(() => { hi.assign(mid); });
+      });
+      depthFinal.assign(lo.add(hi).mul(0.5));
+    }
+    const uvPom = uv0.sub(parallax.mul(depthFinal));
+
+    // --- heightfield self-shadowing (HIGH only, brief item 2) ----------------
+    // March from the surface point toward the light in tangent space; any
+    // sample rising above the ray darkens the fragment (soft accumulation).
+    const sunDirectionView = uniform(new THREE.Vector3(0.2, 0.9, 0.2));
+    const shadow = float(1).toVar();
+    if (caps.tier === 'HIGH') {
+      const sunTs = vec3(
+        tDir.dot(sunDirectionView),
+        bDir.dot(sunDirectionView),
+        nDir.dot(sunDirectionView)
+      ).normalize().toVar();
+      If(sunTs.z.greaterThan(0.02), () => {
+        const sunParallax = sunTs.xy.div(max(sunTs.z, 0.08)).mul(heightScaleNode).toVar();
+        const s = float(0).toVar();
+        Loop(8, () => {
+          s.addAssign(float(1.0 / 8));
+          const hS = texture(sheet.ormh, uvPom.add(sunParallax.mul(s))).a;
+          If(hS.greaterThan(depthFinal.add(s)), () => {
+            shadow.mulAssign(mix(float(0.45), float(1.0), s.mul(0.5)));
+          });
+        });
+      });
+    }
+
+    // --- wire the packed sheet ------------------------------------------------
+    material.colorNode = texture(sheet.albedo, uvPom).rgb.mul(shadow);
+    material.normalNode = normalMap(texture(sheet.normal, uvPom));
+    material.roughnessNode = texture(sheet.ormh, uvPom).g;
+    material.metalnessNode = texture(sheet.ormh, uvPom).b;
+    material.aoNode = texture(sheet.ormh, uvPom).r;
+
+    return { material, sunDirectionView, pomSteps: steps };
+  } catch (e) {
+    console.warn('materials: POM node material unavailable, falling back to baked normals', e);
+    return null;
+  }
+}
+
+// ============================================================================
+// §7.4 factory catalog — stone / masonry
+// ============================================================================
+
+// Ashlar light (Paititi primary stone, sunlit faces) — fresh ashlar 0.75–0.85
 export function ashlarLight(): THREE.MeshStandardMaterial {
-    const mat = new THREE.MeshStandardMaterial({
+    return new THREE.MeshStandardMaterial({
         color: 0xCFC6B4,
-        roughness: 0.8, // fresh ashlar 0.75-0.85
+        roughness: 0.8,
         metalness: 0.0,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
-    return mat;
 }
 
-export async function buildAshlarLightWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
-    if (!caps.isWebGPU) return null;
-    const TSL = await loadWebGPU();
-    if (TSL && TSL.MeshStandardNodeMaterial) {
-        const mat = new TSL.MeshStandardNodeMaterial({ color: 0xCFC6B4, roughness: 0.8 });
-
-        if (TSL.Fn && TSL.uv && TSL.float && TSL.vec3 && TSL.floor && TSL.fract && TSL.step && TSL.sin && TSL.mix) {
-             const buildAshlar = TSL.Fn(() => {
-                 const vUv = TSL.uv().mul(10.0);
-                 const grid = TSL.floor(vUv);
-                 const edge = TSL.fract(vUv);
-                 const joint = TSL.step(edge.x, 0.05).add(TSL.step(edge.y, 0.05)).clamp(0, 1);
-
-                 const jitter = TSL.fract(TSL.sin(grid.x.mul(12.9898).add(grid.y.mul(78.233))).mul(43758.5453)).mul(0.08).sub(0.04);
-                 const baseColor = TSL.vec3(0xCFC6B4).add(TSL.vec3(jitter));
-
-                 return TSL.mix(baseColor, TSL.vec3(0.5), joint);
-             });
-             mat.colorNode = buildAshlar();
-             return mat as any;
-        }
-    }
-    return null;
-}
-
-// Ashlar weathered (Paititi shadow faces / older structures)
+// Ashlar weathered (Paititi shadow faces / older structures) — weathered 0.85–0.95
 export function ashlarWeathered(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0xA89E86,
-        roughness: 0.9, // weathered stone 0.85-0.95
+        roughness: 0.9,
         metalness: 0.0,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
-}
-
-export async function buildAshlarWeatheredWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
-    if (!caps.isWebGPU) return null;
-    const TSL = await loadWebGPU();
-    if (TSL && TSL.MeshStandardNodeMaterial) {
-        const mat = new TSL.MeshStandardNodeMaterial({ color: 0xA89E86, roughness: 0.9 });
-        if (TSL.Fn && TSL.uv && TSL.float && TSL.vec3 && TSL.floor && TSL.fract && TSL.step && TSL.sin && TSL.mix) {
-             const buildAshlar = TSL.Fn(() => {
-                 const vUv = TSL.uv().mul(10.0);
-                 const grid = TSL.floor(vUv);
-                 const edge = TSL.fract(vUv);
-                 const joint = TSL.step(edge.x, 0.05).add(TSL.step(edge.y, 0.05)).clamp(0, 1);
-                 const jitter = TSL.fract(TSL.sin(grid.x.mul(12.9898).add(grid.y.mul(78.233))).mul(43758.5453)).mul(0.08).sub(0.04);
-                 const baseColor = TSL.vec3(0xA89E86).add(TSL.vec3(jitter));
-                 return TSL.mix(baseColor, TSL.vec3(0.3), joint);
-             });
-             mat.colorNode = buildAshlar();
-             return mat as any;
-        }
-    }
-    return null;
 }
 
 // Granite (High Sierra cliff faces, outcrops)
@@ -117,6 +288,7 @@ export function granite(): THREE.MeshStandardMaterial {
         metalness: 0.05,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
@@ -124,53 +296,59 @@ export function granite(): THREE.MeshStandardMaterial {
 export function limestoneSwallowed(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0xB8B0A0,
-        roughness: 0.9, // weathered stone
+        roughness: 0.9,
         metalness: 0.0,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// Plaza worn (Worn paving, polished by feet)
+// Plaza worn (worn paving, polished by feet) — 0.45–0.55
 export function plazaWorn(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0x9A917E,
-        roughness: 0.5, // worn paving 0.45-0.55
+        roughness: 0.5,
         metalness: 0.0,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// Cave dark (Deep interior stone)
+// Cave dark (deep interior stone) — envMapIntensity 0.3 per §4.1
 export function caveDark(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x4A4A48, // dark, desaturated
-        roughness: 0.7, // damp roughness 0.55-0.7
+        color: 0x4A4A48,
+        roughness: 0.7,
         metalness: 0.0,
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
-        envMapIntensity: 0.3 // deep interior stone 0.3
+        envMapIntensity: 0.3,
     });
 }
 
-// --- Metal ---
+// ============================================================================
+// Metal (§4.2 catalog: gold / bronze / ironDark / copperWorn)
+// ============================================================================
 
-// Gold (Sun disk, rings, inlay)
+// Gold (sun disk, rings, inlay) — metalness 1.0, roughness 0.32–0.38
 export function gold(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0xD4A017,
-        roughness: 0.35, // gold 0.32-0.38
+        roughness: 0.35,
         metalness: 1.0,
+        envMapIntensity: 1.0,
     });
 }
 
-// Bronze (Mechanisms, dials)
+// Bronze (mechanisms, dials) — metalness 0.85, roughness 0.4–0.5
 export function bronze(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0x8C6A3F,
-        roughness: 0.45, // bronze 0.4-0.5
+        roughness: 0.45,
         metalness: 0.85,
+        envMapIntensity: 1.0,
     });
 }
 
@@ -180,187 +358,211 @@ export function ironDark(): THREE.MeshStandardMaterial {
         color: 0x4A4D50,
         roughness: 0.6,
         metalness: 0.8,
-        normalMap: getNormalMap(), // slight texture for iron
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// --- Organic ---
+// Copper worn (roofing, drains, decorative strips — §4.2 catalog)
+export function copperWorn(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x9C6B45,
+        roughness: 0.55,
+        metalness: 0.85,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
 
-// Wood aged (Old structures, barricades)
+// ============================================================================
+// Organic (wood / thatch / fabric / leather)
+// ============================================================================
+
+// Wood aged (old structures, barricades) — wood 0.8–0.9
 export function woodAged(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x5C4033, // rotting wood from cloud forest palette
-        roughness: 0.85, // wood 0.8-0.9
-        metalness: 0.0,
-        normalMap: getNormalMap(), // grain bump
-        roughnessMap: getNoiseMap(),
-    });
-}
-
-// Wood wet (Jungle / near water structures)
-export function woodWet(): THREE.MeshStandardMaterial {
-    return new THREE.MeshStandardMaterial({
-        color: 0x4A3025, // darker wood
-        roughness: 0.6, // wet reduces roughness
+        color: 0x5C4033,
+        roughness: 0.85,
         metalness: 0.0,
         normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// Thatch / Ichu grass (Roofs, dry vegetation elements)
+// Wood wet (jungle / near-water structures) — wet lowers roughness
+export function woodWet(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x4A3025,
+        roughness: 0.6,
+        metalness: 0.0,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
+
+// Thatch / ichu grass (roofs, dry high-sierra vegetation)
 export function thatchIchu(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x9A8B4F, // High sierra Ichu grass
+        color: 0x9A8B4F,
         roughness: 0.9,
         metalness: 0.0,
         normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// Fabric worn (Tents, banners - uses parameter)
+// Fabric worn (tents, banners) — cloth 0.9–1.0
 export function fabricWorn(hex: number): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: hex,
-        roughness: 0.95, // cloth 0.9-1.0
+        roughness: 0.95,
         metalness: 0.0,
-        roughnessMap: getNoiseMap(), // wear and tear
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// Leather dark (Gear, straps)
+// Leather dark (gear, straps)
 export function leatherDark(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0x2C1A10,
-        roughness: 0.75, // Leather has lower roughness than cloth
+        roughness: 0.75,
         metalness: 0.05,
+        normalMap: getNormalMap(),
+        envMapIntensity: 1.0,
     });
 }
 
-// --- Special ---
+// ============================================================================
+// Special — lampEmissive is the ONLY emissive factory (§4.4 anti-glow law)
+// ============================================================================
 
-// Lamp emissive (The ONLY material allowed to glow)
 export function lampEmissive(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0xFFB45E, // warm lamp color
+        color: 0xFFB45E,          // warm lamp color — never white-blue/green/magenta
         emissive: 0xFFB45E,
-        emissiveIntensity: 2.0, // allowed budget for lamps
-        roughness: 0.2, // glass/flame like
+        emissiveIntensity: 2.0,   // lamp budget cap (§4.4); requires lamp geometry
+        roughness: 0.2,
         metalness: 0.0,
     });
 }
 
-// --- Water ---
+// ============================================================================
+// Water (constructed through these helpers; full water spec is §7.5/V-WATER)
+// ============================================================================
 
-// Pool still (Still/slow pool water)
+// River water (flowing river surface) — water roughness 0.05–0.15, env 1.2
+export function riverWater(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x335566,
+        roughness: 0.1,
+        metalness: 0.0,
+        transparent: true,
+        opacity: 0.85,
+        normalMap: getNormalMap(),
+        envMapIntensity: 1.2,
+    });
+}
+
+// Pool still (still/slow pool water)
 export function poolStill(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x14261E, // Dark water
+        color: 0x14261E,
         roughness: 0.08,
         metalness: 0.0,
         transparent: true,
         opacity: 0.85,
         normalMap: getNormalMap(),
+        envMapIntensity: 1.2,
     });
 }
 
-export async function buildPoolStillWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
-    if (!caps.isWebGPU) return null;
-    const TSL = await loadWebGPU();
-    if (TSL && TSL.MeshPhysicalNodeMaterial) {
-        const mat = new TSL.MeshPhysicalNodeMaterial({
-            color: 0x14261E,
-            roughness: 0.08,
-            metalness: 0.0,
-            transmission: 0.6,
-            transparent: true,
-        });
-
-        if (TSL.texture && TSL.time && TSL.vec2) {
-            const normalMap = getNormalMap();
-            // Slow flowing normals
-            const offset1 = TSL.time.mul(0.05);
-            const offset2 = TSL.time.mul(-0.02);
-
-            // Mix two scrolling layers
-            const n1 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset1, offset1)));
-            const n2 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset2, 0.0)));
-            mat.normalNode = n1.add(n2).mul(0.5);
-        }
-        return mat as any;
-    }
-    return null;
-}
-
-// Channel clear (Clear flowing channel water)
+// Channel clear (clear flowing channel water)
 export function channelClear(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x2E5A6E, // Channel water
+        color: 0x2E5A6E,
         roughness: 0.08,
         metalness: 0.0,
         transparent: true,
         opacity: 0.85,
         normalMap: getNormalMap(),
+        envMapIntensity: 1.2,
     });
 }
 
-export async function buildChannelClearWebGPU(caps: RenderCaps): Promise<THREE.Material | null> {
-    if (!caps.isWebGPU) return null;
-    const TSL = await loadWebGPU();
-    if (TSL && TSL.MeshPhysicalNodeMaterial) {
-        const mat = new TSL.MeshPhysicalNodeMaterial({
-            color: 0x2E5A6E,
-            roughness: 0.08,
-            metalness: 0.0,
-            transmission: 0.6,
-            transparent: true,
-        });
+// ============================================================================
+// Character (owned by V-MAT, applied in character.ts by V-CHAR; detail maps
+// from textures.ts give the close-up read the §1.1 photo test demands)
+// ============================================================================
 
-        if (TSL.texture && TSL.time && TSL.vec2) {
-            const normalMap = getNormalMap();
-            // Faster flowing normals for channel
-            const offset1 = TSL.time.mul(0.15);
-            const offset2 = TSL.time.mul(0.08);
+interface SkinDetailMaps { normal: THREE.DataTexture; roughness: THREE.DataTexture; }
+const detailCache: {
+  skin?: SkinDetailMaps;
+  cloth?: SkinDetailMaps;
+  hair?: THREE.DataTexture;
+} = {};
 
-            // Mix two scrolling layers
-            const n1 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(offset1, 0.0)));
-            const n2 = TSL.texture(normalMap, TSL.uv().add(TSL.vec2(0.0, offset2)));
-            mat.normalNode = n1.add(n2).mul(0.5);
-        }
-        return mat as any;
-    }
-    return null;
+function getSkinDetail(): SkinDetailMaps {
+  if (!detailCache.skin) detailCache.skin = createSkinDetailTexture(256);
+  return detailCache.skin;
 }
 
-// --- Character ---
+function getClothDetail(): SkinDetailMaps {
+  if (!detailCache.cloth) detailCache.cloth = createClothWeaveTexture(256);
+  return detailCache.cloth;
+}
 
-// Skin Naira (with SSS approximation)
+function getHairDetail(): THREE.DataTexture {
+  if (!detailCache.hair) detailCache.hair = createHairStrandTexture(256);
+  return detailCache.hair;
+}
+
+// Skin Naira (SSS approximation + pore micro-normal)
 export function skinNaira(): THREE.MeshPhysicalMaterial {
     return new THREE.MeshPhysicalMaterial({
         color: 0x8D5524,
-        roughness: 0.6, // skin 0.55-0.65
+        roughness: 0.6,           // skin 0.55–0.65
         metalness: 0.0,
-        transmission: 0.1, // Fake SSS
+        transmission: 0.1,        // fake SSS (kept subtle — no glow, §4.4 spirit)
         thickness: 0.5,
         clearcoat: 0.1,
+        normalMap: getSkinDetail().normal,
+        normalScale: new THREE.Vector2(0.35, 0.35),
+        envMapIntensity: 1.0,
     });
 }
 
-// Cloth Field (weather-worn field clothing)
+// Cloth Field (weather-worn field clothing + weave normal)
 export function clothField(): THREE.MeshPhysicalMaterial {
     return new THREE.MeshPhysicalMaterial({
         color: 0x4A5D23,
-        roughness: 0.95, // cloth 0.9-1.0
+        roughness: 0.95,          // cloth 0.9–1.0
         metalness: 0.0,
         clearcoat: 0.0,
+        normalMap: getClothDetail().normal,
+        normalScale: new THREE.Vector2(0.5, 0.5),
+        envMapIntensity: 1.0,
     });
 }
 
-// Hair Dark (Braid)
+// Hair Dark (braid; strand roughness streaks + anisotropic highlight)
 export function hairDark(): THREE.MeshPhysicalMaterial {
-    return new THREE.MeshPhysicalMaterial({
+    const mat = new THREE.MeshPhysicalMaterial({
         color: 0x0A0A0A,
-        roughness: 0.4,
+        roughness: 1.0,           // multiplied by the strand streak map (0.35–0.65)
         metalness: 0.1,
-        clearcoat: 0.3, // Shiny hair response
+        clearcoat: 0.25,
+        roughnessMap: getHairDetail(),
+        envMapIntensity: 1.0,
     });
+    mat.anisotropy = 0.5;
+    // Braid tube UVs run the strand direction along V; texture streaks run
+    // along V, so rotate the anisotropy frame a quarter turn.
+    mat.anisotropyRotation = Math.PI / 2;
+    return mat;
 }
