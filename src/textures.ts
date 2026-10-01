@@ -712,3 +712,239 @@ export function createTerrainRoughnessTexture(size: number = 256): THREE.DataTex
     tex.needsUpdate = true;
     return tex;
 }
+
+// ============================================================================
+// Foliage cards + mist sprite (V-FOLIAGE).
+//
+// §7.3 FoliageSpec.cardTexture and §6.3: foliage cards ≤ 256², alpha-TESTED
+// (never alpha-blended) with side: DoubleSide. Cards are drawn WHITE with
+// internal luminance variation — the tint comes from per-instance color
+// (FoliageSpec.colorA..colorB), so one silhouette serves a whole biome.
+// Alpha is authored hard (1 px antialiased edge only) so alphaTest 0.5 keeps
+// crisp silhouettes with no dithered halo. Generation is seeded — reproducible
+// frames for §5.4/§8 A/B gates.
+// ============================================================================
+
+export type FoliageCardKind = 'broadleaf' | 'grass' | 'fern' | 'orchid';
+
+const CARD_SEEDS: Record<FoliageCardKind, number> = {
+    broadleaf: 0x5EE01, grass: 0x1C0D0, fern: 0x3E2A1, orchid: 0x4F1C7,
+};
+
+// Luminance ramp kept 0.78–0.97: near-white for clean instance tinting, never
+// a flat single value (flat cards read as paper cutouts at close range).
+function cardShade(rng: () => number, base = 0.78, spread = 0.19): string {
+    const v = Math.round((base + rng() * spread) * 255);
+    return `rgb(${v},${v},${v})`;
+}
+
+// A single leaf: two quadratic curves meeting at a tip, anchored at (x,y),
+// pointing at `angle` (radians, -y is "up" on canvas), length L width W.
+function cardLeaf(
+    ctx: CanvasRenderingContext2D, rng: () => number,
+    x: number, y: number, angle: number, L: number, W: number, fill: string
+): void {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(W, -L * 0.45, 0, -L);
+    ctx.quadraticCurveTo(-W, -L * 0.45, 0, 0);
+    ctx.fill();
+    ctx.restore();
+}
+
+// Tapered grass blade from (bx,by) toward tip (tx,ty) with sideways bow `bend`.
+function cardBlade(
+    ctx: CanvasRenderingContext2D, rng: () => number,
+    bx: number, by: number, tx: number, ty: number, w: number, bend: number
+): void {
+    const mx = (bx + tx) / 2, my = (by + ty) / 2;
+    const dx = ty - by, dy = bx - tx; // perpendicular
+    const dl = Math.max(1e-4, Math.hypot(dx, dy));
+    const px = dx / dl, py = dy / dl;
+    ctx.fillStyle = cardShade(rng, 0.74, 0.24);
+    ctx.beginPath();
+    ctx.moveTo(bx - px * w, by - py * w);
+    ctx.quadraticCurveTo(mx - px * w * 0.35 + px * bend, my - py * w * 0.35 + py * bend, tx, ty);
+    ctx.quadraticCurveTo(mx + px * w * 0.35 + px * bend, my + py * w * 0.35 + py * bend, bx + px * w, by + py * w);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function foliageCardCanvas(kind: FoliageCardKind, size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    const rng = mulberry32(CARD_SEEDS[kind]);
+    const S = size;
+    ctx.clearRect(0, 0, S, S);
+
+    if (kind === 'broadleaf') {
+        // Canopy mass: jittered ring of leaves around an off-center heart.
+        // Luminance falls toward the clump center/base — a baked depth cue
+        // that keeps layered cards from reading as one flat pom-pom.
+        const cx = S * 0.5, cy = S * 0.4;
+        const R = S * 0.3;
+        for (let i = 0; i < 22; i++) {
+            const a = (i / 22) * Math.PI * 2 + rng() * 0.55;
+            const r = R * (0.35 + rng() * 0.6);
+            const lx = cx + Math.cos(a) * r * 1.15;
+            const ly = cy + Math.sin(a) * r * 0.85;
+            const L = S * (0.13 + rng() * 0.09);
+            // outer + higher leaves catch light; inner + lower go darker
+            const depth = r / R;
+            const lum = 0.62 + depth * 0.3 + (cy - ly) / S * 0.25 + rng() * 0.08;
+            cardLeaf(ctx, rng, lx, ly, a + Math.PI / 2 + (rng() - 0.5) * 0.9, L, L * 0.42,
+                cardShade(rng, Math.min(0.94, Math.max(0.5, lum)), 0.02));
+        }
+        for (let i = 0; i < 7; i++) {
+            const lx = S * (0.18 + rng() * 0.64);
+            const ly = S * (0.62 + rng() * 0.2);
+            const L = S * (0.12 + rng() * 0.07);
+            cardLeaf(ctx, rng, lx, ly, Math.PI + (rng() - 0.5) * 1.6, L, L * 0.4, cardShade(rng, 0.6, 0.14));
+        }
+        // Trunk-facing stem wedge (dark — attaches to the instanced trunk).
+        ctx.fillStyle = cardShade(rng, 0.45, 0.1);
+        ctx.beginPath();
+        ctx.moveTo(S * 0.44, S);
+        ctx.lineTo(S * 0.56, S);
+        ctx.lineTo(S * 0.5, cy + S * 0.08);
+        ctx.closePath();
+        ctx.fill();
+        // Light gaps between leaf layers (alpha holes → depth when layered).
+        ctx.globalCompositeOperation = 'destination-out';
+        for (let i = 0; i < 10; i++) {
+            const a = rng() * Math.PI * 2;
+            const r = R * rng() * 0.85;
+            ctx.beginPath();
+            ctx.ellipse(cx + Math.cos(a) * r, cy + Math.sin(a) * r, S * 0.015, S * 0.05, a, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+    } else if (kind === 'grass') {
+        // Ichu tussock: many thin bowed blades from one base — tighter fan
+        // than a starburst, lengths staggered inner-short/outer-long so the
+        // silhouette arcs like a grass clump, not an agave rosette.
+        const bx = S * 0.5, by = S * 0.97;
+        const n = 19;
+        for (let i = 0; i < n; i++) {
+            const t = i / (n - 1) - 0.5;
+            const a = -Math.PI / 2 + t * 1.9 + (rng() - 0.5) * 0.18;
+            const centerBias = 1 - Math.abs(t) * 0.55;
+            const len = S * (0.34 + rng() * 0.5) * (0.55 + centerBias * 0.65);
+            const tx = bx + Math.cos(a) * len;
+            const ty = by + Math.sin(a) * len;
+            const bend = Math.sign(t || 1) * (0.1 + rng() * 0.35) * S * 0.3;
+            cardBlade(ctx, rng, bx, by, tx, ty, S * (0.008 + rng() * 0.009), bend);
+        }
+    } else if (kind === 'fern') {
+        // Fronds of paired pinnae arcing out from the base.
+        const bx = S * 0.5, by = S * 0.96;
+        const n = 7;
+        for (let i = 0; i < n; i++) {
+            const a = -Math.PI / 2 + (i / (n - 1) - 0.5) * 2.5 + (rng() - 0.5) * 0.15;
+            const len = S * (0.62 + rng() * 0.3);
+            // Stem: quadratic base → tip, control bowed outward/downward.
+            const tx = bx + Math.cos(a) * len;
+            const ty = by + Math.sin(a) * len + S * 0.06;
+            const cxx = bx + Math.cos(a) * len * 0.55 + Math.cos(a + Math.PI / 2) * S * 0.05;
+            const cyy = by + Math.sin(a) * len * 0.5;
+            ctx.strokeStyle = cardShade(rng, 0.6, 0.12);
+            ctx.lineWidth = S * 0.008;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.quadraticCurveTo(cxx, cyy, tx, ty);
+            ctx.stroke();
+            // Pinnae pairs along the stem, shrinking toward the tip.
+            const steps = 9;
+            for (let sIdx = 1; sIdx <= steps; sIdx++) {
+                const t = sIdx / (steps + 1);
+                const px = (1 - t) * (1 - t) * bx + 2 * (1 - t) * t * cxx + t * t * tx;
+                const py = (1 - t) * (1 - t) * by + 2 * (1 - t) * t * cyy + t * t * ty;
+                const pl = len * 0.2 * (1 - t * 0.75);
+                const pa = a + Math.PI / 2;
+                cardLeaf(ctx, rng, px, py, pa + 0.5 + rng() * 0.3, pl, pl * 0.34, cardShade(rng));
+                cardLeaf(ctx, rng, px, py, pa - 0.5 - rng() * 0.3, pl, pl * 0.34, cardShade(rng));
+            }
+        }
+    } else { // orchid
+        // Sparse epiphyte accent: 3 basal blades + one stem, small 5-petal
+        // flowers. Instance tint supplies the §2.2 orchid color.
+        const bx = S * 0.5, by = S * 0.94;
+        for (let i = 0; i < 3; i++) {
+            const a = -Math.PI / 2 + (i - 1) * 0.75 + (rng() - 0.5) * 0.2;
+            cardLeaf(ctx, rng, bx, by, a, S * (0.26 + rng() * 0.08), S * 0.028, cardShade(rng, 0.66, 0.14));
+        }
+        // Stem up to the flower cluster.
+        const sx = bx + S * 0.05, syTop = S * 0.34;
+        ctx.strokeStyle = cardShade(rng, 0.7, 0.1);
+        ctx.lineWidth = S * 0.011;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.quadraticCurveTo(bx + S * 0.1, S * 0.62, sx, syTop);
+        ctx.stroke();
+        // Flowers: 5 petals around a center, slight per-flower jitter.
+        const flowers: Array<[number, number, number]> = [
+            [sx, syTop, 1.0],
+            [sx - S * 0.09, syTop + S * 0.07, 0.8],
+            [sx + S * 0.08, syTop + S * 0.05, 0.75],
+        ];
+        for (const [fx, fy, fs] of flowers) {
+            const pr = S * 0.055 * fs;
+            for (let p = 0; p < 5; p++) {
+                const pa = (p / 5) * Math.PI * 2 + rng() * 0.3;
+                cardLeaf(ctx, rng, fx + Math.cos(pa) * pr * 0.5, fy + Math.sin(pa) * pr * 0.5, pa + Math.PI / 2, pr, pr * 0.5, cardShade(rng, 0.86, 0.1));
+            }
+        }
+    }
+
+    return canvas;
+}
+
+// Alpha-tested foliage card, ≤ 256² (§6.3). sRGB colorSpace; mipmapped so
+// distant cards dissolve instead of sparkling.
+export function createFoliageCardTexture(kind: FoliageCardKind, size: number = 256): THREE.Texture {
+    const actual = Math.min(size, 256);
+    const tex = new THREE.CanvasTexture(foliageCardCanvas(kind, actual));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+}
+
+// Soft radial mist sprite (§2.2 mist blue-grey tint is applied by the
+// material; this supplies only the alpha falloff). Used with
+// transparent + depthWrite:false per §6.3.
+export function createMistTexture(size: number = 128): THREE.Texture {
+    const actual = Math.min(size, 256);
+    const canvas = document.createElement('canvas');
+    canvas.width = actual;
+    canvas.height = actual;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        const c = actual / 2;
+        const g = ctx.createRadialGradient(c, c, 0, c, c, c);
+        g.addColorStop(0, 'rgba(255,255,255,0.9)');
+        g.addColorStop(0.4, 'rgba(255,255,255,0.42)');
+        g.addColorStop(0.75, 'rgba(255,255,255,0.12)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, actual, actual);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+}
