@@ -35,6 +35,7 @@ declare global {
     __rendererType?: 'webgpu' | 'webgl2';
     __frameDataURL?: string;
     __ktx2Supported?: boolean;
+    __atmosDebug?: { dust: THREE.Points; pollen: THREE.Points; motes: THREE.Points };
   }
 }
 
@@ -231,10 +232,40 @@ async function init() {
   // in §8 captures; zero cost otherwise).
   if (urlParams.get('nm') === '1') decor.mist.prob = {};
 
-  const dustParticles = new ParticleSystem(scene, 'dust');
-  const leavesParticles = new ParticleSystem(scene, 'leaves');
-  const snowParticles = new ParticleSystem(scene, 'snow'); // Could conditionally add based on biome later
-  const volumetrics = new VolumetricLightShafts(scene, todParam);
+  // V-ATMOS: particles are biome-gated (dust → high_sierra, pollen →
+  // jungle_lowlands, motes → cloud_forest) and take RenderCaps for the
+  // §6.3 LOW-tier counts; shafts take caps for the 5/3 cluster rule.
+  // spray stays unwired (no cascade fires in this height field — p5).
+  const dustParticles = new ParticleSystem(scene, 'dust', renderCaps);
+  const leavesParticles = new ParticleSystem(scene, 'leaves', renderCaps);
+  const snowParticles = new ParticleSystem(scene, 'snow', renderCaps);
+  const volumetrics = new VolumetricLightShafts(scene, todParam, renderCaps);
+
+  // One atmosphere step shared by play mode and the shot harness: biome
+  // visibility gate + deterministic sim-to-t + shaft re-anchor/opacity.
+  // &np=1 suspends particles and &nv=1 suspends the shaft clusters (A/B
+  // isolation of the shaft/particle reads, same discipline as &nm=1 for
+  // mist and &nf=1 for foam).
+  const particlesSuspended = urlParams.get('np') === '1';
+  const shaftsSuspended = urlParams.get('nv') === '1';
+  const updateAtmosphere = (pos: THREE.Vector3, time: number, regionId: string | null, tod: string | null) => {
+    const gate = (system: ParticleSystem, region: string) => {
+      system.points.visible = !particlesSuspended && regionId === region;
+      if (system.points.visible) system.update(pos, time);
+    };
+    gate(dustParticles, 'high_sierra');
+    gate(leavesParticles, 'jungle_lowlands');
+    gate(snowParticles, 'cloud_forest');
+    volumetrics.group.visible = !shaftsSuspended;
+    volumetrics.update(pos, regionId, tod);
+  };
+  // Verification probe (shot tooling, same discipline as __rendererType):
+  // lets the §8 harness assert the biome gate + particle field state.
+  window.__atmosDebug = {
+    dust: dustParticles.points,
+    pollen: leavesParticles.points,
+    motes: snowParticles.points,
+  };
 
   const input = new InputManager();
 
@@ -702,6 +733,61 @@ async function init() {
       const camY = getGlobalTerrainHeight(camX, camZ) + camH;
       camera.position.set(camX, camY, camZ);
       camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2 + num('ly', vant.ly ?? 0), lz);
+    } else if (shot === 'atmos_check') {
+      // Verification-only framing (visual bible §8 + §5.2 T7/T9 + §3.3.3):
+      // biome particles in their home regions + golden-hour shaft peak + a
+      // far-vista row for the companion brief's aerial-perspective item.
+      // &v= picks the vantage; cx/cz/lx/lz/cd/ch/ly generic overrides;
+      // &rg= forces the biome gate; &np=1 suspends particles (A/B).
+      const v = urlParams.get('v') || 'cf_shafts';
+      const vantages: Record<string, { cx: number; cz: number; look: [number, number]; ly?: number; ch?: number; cd?: number; rg: string }> = {
+        // Cloud forest, dawn: p4's measured cf_dawnlit recipe (elevated
+        // camera on the high point, aim NNE across descending lit terrain,
+        // sun glow out of frame — crush 9.96% / clip 0.000% in p4). The
+        // first probe aimed ENE into the dawn sun disc (az 90) and clipped
+        // 8.9% — the sun-ward rule again. Shafts read against the lit
+        // hillside at 0.225 additive; motes drift through the beams.
+        cf_shafts: { cx: -140, cz: 80, look: [-100, 160], ch: 18, rg: 'cloud_forest' },
+        // Sierra, day: p4's sierra_ichu NNW shoulder, but pulled in tight
+        // (aim ~35 m, camera ch 12, look 3 m DOWN into the shadowed valley
+        // fold): the wide-haze first framing washed the dust out completely
+        // (presence A/B 0.09% — backlit dust needs a darker background than
+        // mist-bright hillsides; visibility is a framing property first).
+        sierra_dust: { cx: 40, cz: 660, look: [-2, 692], ch: 12, ly: -3, rg: 'high_sierra' },
+        // Jungle, day (bounds z ≤ −701): short NNW aim per p4's
+        // jungle_fern lesson (river-line fog wash stays out of frame).
+        jungle_pollen: { cx: 20, cz: -800, look: [-20, -845], ch: 4, rg: 'jungle_lowlands' },
+        // Paititi, dawn: p4's paititi_edge vantage (west flank, north aim
+        // along the flank — straight-across aims whiteout, measured p3+p4).
+        // The p4 deferred hard-edged shaft cards showed in this region.
+        paititi_regr: { cx: 680, cz: -40, look: [740, 90], ch: 9, rg: 'paititi' },
+        // Far vista (companion brief item 7 — aerial perspective): from
+        // the valley floor looking N at the sierra range ~800 m out;
+        // distant peaks must fade blue into the sky with NO hard cutoff
+        // (FogExp2 floor per §3.3.2 — evidence row, no geometry change).
+        vista: { cx: 0, cz: 300, look: [0, 1150], ch: 14, rg: 'high_sierra' },
+      };
+      const vant = vantages[v] || vantages.cf_shafts;
+      const num = (k: string, d: number) => {
+        const s = urlParams.get(k);
+        return s === null ? d : parseFloat(s);
+      };
+      const VX = { cx: num('cx', vant.cx), cz: num('cz', vant.cz), lx: 0, lz: 0 };
+      VX.lx = num('lx', vant.look[0]);
+      VX.lz = num('lz', vant.look[1]);
+      const camDist = num('cd', vant.cd ?? 10), camH = num('ch', vant.ch ?? 4);
+      const [lx, lz] = [VX.lx, VX.lz];
+      const dx = lx - VX.cx, dz = lz - VX.cz;
+      const dl = Math.max(0.001, Math.hypot(dx, dz));
+      const ux = dx / dl, uz = dz / dl;
+      const camX = VX.cx - ux * camDist, camZ = VX.cz - uz * camDist;
+      character.teleport(camX - ux * 10, camZ - uz * 10, 0);
+      character.disableCameraUpdate = true;
+      const camY = getGlobalTerrainHeight(camX, camZ) + camH;
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2 + num('ly', vant.ly ?? 0), lz);
+      // Biome gate follows the vantage (generic &rg= still wins below).
+      if (!urlParams.get('rg')) urlParams.set('rg', vant.rg);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
       character.disableCameraUpdate = true;
@@ -750,6 +836,20 @@ async function init() {
     // p5: same discipline for the water flow clock — ?t= drives the scroll
     // uniforms so two captures at different t show §8.3 water motion.
     river.update(tStr ? parseFloat(tStr) : 0);
+    // p6: same discipline for the atmosphere — particles simulate
+    // deterministically to ?t= (fixed-timestep catch-up) and re-wrap around
+    // the SHOT camera; shaft clusters re-anchor on the camera grid and read
+    // their §3.3 intensity from the active grade. Region: prefix shots gate
+    // biomes via the shot id; custom vantages can force one with &rg=.
+    // (Particles/volumetrics were never updated in shot mode before —
+    // every §8 capture rendered the origin-seeded pile or nothing.)
+    {
+      let activeRegionId = regionManager.currentRegionId;
+      if (shot && shot.startsWith('region:')) activeRegionId = shot.replace('region:', '');
+      const rg = urlParams.get('rg');
+      if (rg) activeRegionId = rg;
+      updateAtmosphere(camera.position, tStr ? parseFloat(tStr) : 0, activeRegionId, todParam);
+    }
 
     // Shot-time chunk streaming (p4): the origin-centered chunk disc is
     // circle-culled (corners beyond chunk radius 4 unload), leaving fog-void
@@ -814,14 +914,10 @@ async function init() {
       decor.update(camera);
       getActiveLightRig()?.update(character.mesh.position, camera);
 
-      dustParticles.update(camera.position, 'dust');
-      leavesParticles.update(camera.position, 'leaves');
-      snowParticles.update(camera.position, 'snow');
-      let activeRegionId = regionManager.currentRegionId;
-      if (shotMode && shot && shot.startsWith('region:')) {
-          activeRegionId = shot.replace('region:', '');
-      }
-      volumetrics.update(camera.position, activeRegionId, todParam);
+      // V-ATMOS: one gated atmosphere step (region id first — the old order
+      // updated particles before computing it, so the gate could not exist).
+      const activeRegionId = regionManager.currentRegionId;
+      updateAtmosphere(camera.position, time, activeRegionId, todParam);
 
       // Check distance to rockslide trigger zone (approx x: 100, z: 0)
       if (!hasTriggeredRockslide) {
