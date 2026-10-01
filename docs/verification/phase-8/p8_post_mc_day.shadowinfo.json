@@ -1,0 +1,40 @@
+{
+  "rendererType": "webgl2",
+  "shadowMapEnabled": true,
+  "shadowMapAutoUpdate": true,
+  "shadowMapType": 1,
+  "sunCastShadow": true,
+  "sunIntensity": 4.5,
+  "mapSize": [
+    1024,
+    1024
+  ],
+  "frustum": {
+    "left": -90,
+    "right": 90,
+    "top": 90,
+    "bottom": -90,
+    "near": 10,
+    "far": 800
+  },
+  "projScaleX": 0.011111111111111112,
+  "projScaleY": 0.011111111111111112,
+  "bias": -0.0005,
+  "normalBias": 0.263671875,
+  "sunPos": [
+    244.42197812619767,
+    142.0975929941839,
+    -145.00691461673654
+  ],
+  "targetPos": [
+    52.1650635094611,
+    15.312114471974075,
+    47.25
+  ],
+  "meshCensus": {
+    "meshes": 334,
+    "casters": 84,
+    "receivers": 87
+  },
+  "shadowMapAllocated": true
+}

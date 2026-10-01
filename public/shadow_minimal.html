@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Phase 8 diagnostic: CANONICAL three.js shadow example on the SAME
+     three build (0.186.1) and the SAME headless browser that captures the
+     game. If this page casts no shadow in-container, the defect is the
+     SwiftShader rendering stack (like the Phase 1 WebGPU device-loss), not
+     the game's scene config. If it DOES cast, the game config is convicted
+     and gets bisected against this page. No tone mapping, no post, no IBL —
+     the textbook setup from the three.js docs (DirectionalLight + PCF). -->
+<html>
+<head><meta charset="utf-8"><title>shadow minimal repro</title>
+<style>body{margin:0}</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from '/juzu/node_modules/three/build/three.module.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(640, 480);
+// ?mode=on  — shadowMap enabled (canonical PCF)
+// ?mode=off — shadowMap disabled (identical scene, shadows can't contribute)
+// ?mode=nosun — shadowMap enabled but sun.intensity=0 (proves the DIFF of
+//               direct lighting itself is visible; isolates shadow sampling)
+// ?mode=vsm / basic — alternate shadow-map types: VSM stores blurred moments
+//               in a COLOR attachment instead of the depth-texture-compare
+//               path PCF/Basic use. If VSM casts on SwiftShader while PCF
+//               does not, the depth-texture path is the broken bit and VSM
+//               becomes the in-container evidence path.
+const mode = new URLSearchParams(location.search).get('mode') || 'on';
+renderer.shadowMap.enabled = mode !== 'off';
+renderer.shadowMap.type =
+  mode === 'vsm' ? THREE.VSMShadowMap :
+  mode === 'basic' ? THREE.BasicShadowMap : THREE.PCFShadowMap;
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x88aacc);
+const camera = new THREE.PerspectiveCamera(45, 640 / 480, 0.1, 100);
+camera.position.set(6, 5, 8);
+camera.lookAt(0, 0.5, 0);
+
+const sun = new THREE.DirectionalLight(0xffffff, 3.0);
+if (mode === 'nosun') sun.intensity = 0;
+sun.position.set(5, 10, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -10; sun.shadow.camera.right = 10;
+sun.shadow.camera.top = 10; sun.shadow.camera.bottom = -10;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 50;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = mode === 'vsm' ? 0 : 0.02; // textbook value
+if (mode === 'vsm') { sun.shadow.radius = 4; sun.shadow.blurSamples = 8; }
+scene.add(sun);
+scene.add(sun.target);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(20, 20),
+  new THREE.MeshStandardMaterial({ color: 0xCFCFCF, roughness: 0.95 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const box = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x8A6F4D, roughness: 0.85 })
+);
+box.position.y = 0.5;
+box.castShadow = true;
+box.receiveShadow = true;
+scene.add(box);
+
+renderer.render(scene, camera);
+window.__minReady = true;
+window.__minDebug = {
+  mode,
+  glRenderer: (() => {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  })(),
+  shadowMapAllocated: !!sun.shadow.map,
+};
+</script>
+</body>
+</html>

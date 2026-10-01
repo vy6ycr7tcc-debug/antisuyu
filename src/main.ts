@@ -39,6 +39,30 @@ declare global {
     __charDebug?: {
       pos: THREE.Vector3; rotY: number; visible: boolean; state: string; camPos: THREE.Vector3;
     };
+    // Phase 8 shadow probe: full runtime shadow-rig state, evaluated AFTER the
+    // shot render (same discipline as __charDebug/__atmosDebug). projScaleX/Y
+    // are the ortho projection matrix scale terms (2/(r-l), 2/(t-b)) — if the
+    // rig configured ±120 but projScaleX reads ~0.2 (= 2/10, the ±5 DEFAULT
+    // frustum), the projection matrix is stale: updateProjectionMatrix() was
+    // never called after the rig set its bounds (the p7-flagged latent bug).
+    __shadowInfo?: {
+      rendererType: string;
+      shadowMapEnabled: boolean;
+      shadowMapAutoUpdate: boolean;
+      shadowMapType: number;
+      sunCastShadow: boolean;
+      sunIntensity: number;
+      mapSize: [number, number];
+      frustum: { left: number; right: number; top: number; bottom: number; near: number; far: number };
+      projScaleX: number;
+      projScaleY: number;
+      bias: number;
+      normalBias: number;
+      sunPos: [number, number, number];
+      targetPos: [number, number, number];
+      meshCensus: { meshes: number; casters: number; receivers: number };
+      shadowMapAllocated: boolean;
+    };
   }
 }
 
@@ -543,6 +567,71 @@ async function init() {
       // day/night pass at 0.9 (day: 0 clipped whites, frame max 252.3).
       const lt = parseFloat(urlParams.get('lt') || '0.9');
       camera.lookAt(wallX, wallBase + lt, wallZ);
+    } else if (shot === 'shadow_check') {
+      // Phase 8 verification scenario (visual bible §3.2/§3.3): MINIMAL
+      // controlled shadow repro on a known flat deck — three 1 m boxes plus
+      // the character on a uniform-albedo conforming plane, side-lit by the
+      // day sun (elev 25°, az 135°; shadows fall toward az 315). Purpose:
+      // adjudicate the p7-flagged "cast shadows dead scene-wide" between
+      // (a) a rig-config bug — fixable, and (b) a headless rendering-stack
+      // limitation — documentable. If even THIS repro casts nothing in the
+      // container, the defect is the stack, not the scene.
+      // &az= rotates the camera around the deck; default 225 puts the shadow
+      // direction perpendicular to the view axis (side-lit read).
+      // Pair with &sx= runtime experiments (below) for the A/B adjudication:
+      // baseline vs sx=upm (apply the missing updateProjectionMatrix) vs
+      // sx=off (shadowMap disabled). baseline==off pixel-identical proves
+      // shadows never rendered; upm differing convicts the stale projection.
+      character.teleport(250, 246, 0); // parked out of frame by default
+      character.disableCameraUpdate = true;
+      const azDeg = parseFloat(urlParams.get('az') || '225');
+      const azRad = THREE.MathUtils.degToRad(azDeg);
+      const dirX = Math.sin(azRad), dirZ = Math.cos(azRad);
+      const perpX = dirZ, perpZ = -dirX;
+      const ax = 50, az2 = 46; // material_check's measured valley-floor anchor
+
+      // Deck: 24×24 m conforming plane floating 6 cm above the terrain so no
+      // slope pokes through; uniform albedo = clean ROI for pixel-diff gates.
+      const deckGeo = new THREE.PlaneGeometry(24, 24, 24, 24);
+      deckGeo.rotateX(-Math.PI / 2); // XZ-planar, +y up
+      const deckY = getGlobalTerrainHeight(ax, az2) + 0.06;
+      const deckPos = deckGeo.attributes.position;
+      for (let i = 0; i < deckPos.count; i++) {
+        const wx = ax + deckPos.getX(i);
+        const wz = az2 + deckPos.getZ(i);
+        deckPos.setY(i, getGlobalTerrainHeight(wx, wz) + 0.06 - deckY);
+      }
+      deckGeo.computeVertexNormals();
+      const deck = new THREE.Mesh(
+        deckGeo,
+        new THREE.MeshStandardMaterial({ color: 0xCFCFCF, roughness: 0.95, metalness: 0 })
+      );
+      deck.position.set(ax, deckY, az2);
+      deck.receiveShadow = true;
+      scene.add(deck);
+
+      // Three known casters on the deck (castShadow AND receiveShadow).
+      const boxMat = new THREE.MeshStandardMaterial({ color: 0x8A6F4D, roughness: 0.85, metalness: 0 });
+      for (const off of [-2, 0, 2]) {
+        const bx = ax + perpX * off, bz = az2 + perpZ * off;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), boxMat);
+        box.position.set(bx, getGlobalTerrainHeight(bx, bz) + 0.56, bz);
+        box.castShadow = true;
+        box.receiveShadow = true;
+        scene.add(box);
+      }
+
+      // Naira ON the deck (right of the box row, facing the camera): a
+      // humanoid caster in the same controlled frame — also re-verifies the
+      // p7 levitation fix under a working shadow pass.
+      const chX = ax + perpX * 4, chZ = az2 + perpZ * 4;
+      const camX = ax + dirX * 9, camZ = az2 + dirZ * 9;
+      character.teleport(chX, chZ, Math.atan2(camX - chX, camZ - chZ));
+      character.disableCameraUpdate = true;
+
+      const eyeY = getGlobalTerrainHeight(camX, camZ) + 1.7;
+      camera.position.set(camX, eyeY, camZ);
+      camera.lookAt(ax, getGlobalTerrainHeight(ax, az2) + 0.8, az2);
     } else if (shot === 'river_crossing') {
       // East rim of the channel: with the Phase 5 water solve the trench at
       // x=0 holds ~6 m of water — the old (0, 0) teleport stands her on the
@@ -895,6 +984,43 @@ async function init() {
           .transformDirection(camera.matrixWorldInverse);
       }
     }
+
+    // Phase 8 shadow experiments (&sx=): runtime A/B levers applied BEFORE the
+    // first render so one capture isolates one candidate cause. These are
+    // measurement probes — the committed fix (if convicted) lives in
+    // lighting.ts. Levers:
+    //   upm  — call shadow.camera.updateProjectionMatrix() on sun+moon (the
+    //          p7-flagged latent bug: rig sets ±120 bounds, ortho projection
+    //          matrix still holds the ±5 constructor default)
+    //   wide — frustum ±400 + updateProjectionMatrix (shadow-REACH probe:
+    //          dawn sun elev 6° casts 9.5× height — does ±120 truncate?)
+    //   nb0  — normalBias 0 (rule out over-bias light leak; p7 A/B'd 1.5→0.1
+    //          with no change, 0 is the floor)
+    //   off  — renderer.shadowMap.enabled = false (control: what "no
+    //          shadows at all" looks like; baseline must differ from this
+    //          if any shadow renders anywhere)
+    const sx = urlParams.get('sx');
+    if (sx) {
+      const rig = getActiveLightRig();
+      if (rig) {
+        const sunCam = rig.sun.shadow.camera;
+        const moonCam = rig.moon.shadow.camera;
+        if (sx === 'upm') {
+          sunCam.updateProjectionMatrix();
+          moonCam.updateProjectionMatrix();
+        } else if (sx === 'wide') {
+          sunCam.left = -400; sunCam.right = 400; sunCam.top = 400; sunCam.bottom = -400;
+          moonCam.left = -400; moonCam.right = 400; moonCam.top = 400; moonCam.bottom = -400;
+          sunCam.updateProjectionMatrix();
+          moonCam.updateProjectionMatrix();
+        } else if (sx === 'nb0') {
+          rig.sun.shadow.normalBias = 0;
+          rig.moon.shadow.normalBias = 0;
+        } else if (sx === 'off') {
+          renderer.shadowMap.enabled = false;
+        }
+      }
+    }
   } else {
     if (urlParams.get('load') === '1') {
       const data = saveAPI.load(0);
@@ -1053,6 +1179,44 @@ async function init() {
         state: character.state,
         camPos: camera.position.clone(),
       };
+      // Phase 8 shadow probe: evaluated AFTER the render so shadowMapAllocated
+      // reflects whether the shadow pass actually ran (LightShadow.map is
+      // allocated lazily on first shadow render).
+      {
+        const rig = getActiveLightRig();
+        if (rig) {
+          const sun = rig.sun;
+          const sc = sun.shadow.camera;
+          let meshes = 0, casters = 0, receivers = 0;
+          scene.traverse((o) => {
+            if (o instanceof THREE.Mesh) {
+              meshes++;
+              if (o.castShadow) casters++;
+              if (o.receiveShadow) receivers++;
+            }
+          });
+          window.__shadowInfo = {
+            rendererType: window.__rendererType || 'unknown',
+            shadowMapEnabled: renderer.shadowMap.enabled,
+            // WebGPURenderer's shadowMap type has no autoUpdate field (only
+            // WebGLShadowMap does); the union needs narrowing.
+            shadowMapAutoUpdate: renderer instanceof THREE.WebGLRenderer ? renderer.shadowMap.autoUpdate : true,
+            shadowMapType: renderer.shadowMap.type,
+            sunCastShadow: sun.castShadow,
+            sunIntensity: sun.intensity,
+            mapSize: [sun.shadow.mapSize.width, sun.shadow.mapSize.height],
+            frustum: { left: sc.left, right: sc.right, top: sc.top, bottom: sc.bottom, near: sc.near, far: sc.far },
+            projScaleX: sc.projectionMatrix.elements[0],
+            projScaleY: sc.projectionMatrix.elements[5],
+            bias: sun.shadow.bias,
+            normalBias: sun.shadow.normalBias,
+            sunPos: [sun.position.x, sun.position.y, sun.position.z],
+            targetPos: [sun.target.position.x, sun.target.position.y, sun.target.position.z],
+            meshCensus: { meshes, casters, receivers },
+            shadowMapAllocated: !!sun.shadow.map,
+          };
+        }
+      }
       window.__shotReady = true;
     }, 100);
   } else {
