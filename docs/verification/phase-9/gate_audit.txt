@@ -1,0 +1,30 @@
+== §8.3 clip/crush gates — composed (shipped) frames ==
+closeup_day_valley       clip= 0.000%  crush=  0.00%  meanL= 178.6  PASS  (p7 9.73% bloom-wash XFAIL -> PASS; vignette bounds output, see header)
+closeup_dawn_valley      clip= 0.000%  crush= 33.52%  meanL=  47.6  XFAIL  (dawn valley-floor shadow physics, p4-p6-documented, light-rig owner; p7 34.95 -> 33.7, improved by the vs retune)
+closeup_dusk_valley      clip= 0.000%  crush=  2.19%  meanL=  59.2  PASS  (p7 14.32% vignette edge-crush XFAIL -> FIXED by J8: display grain +-9 SDR + vs 0.25; p7 raw 2.54 -> 2.2)
+closeup_night            clip= 0.000%  crush= 96.91%  meanL=   2.8  PASS  
+closeup_day_390          clip= 0.000%  crush=  0.00%  meanL= 175.1  PASS  (p7 9.14% bloom-wash XFAIL family -> PASS)
+closeup_dusk_390         clip= 0.000%  crush=  4.15%  meanL=  60.1  PASS  (p7 15.71% vignette XFAIL family -> PASS)
+closeup_day_slope        clip= 0.000%  crush=  0.00%  meanL= 171.3  PASS  (p7 downslope-aim variant, terrain-backed)
+closeup_dusk_slope       clip= 0.000%  crush=  1.80%  meanL=  54.0  PASS  (p7 downslope-aim variant)
+valley_day_regr          clip= 0.000%  crush=  0.00%  meanL= 134.8  PASS  
+valley_dawn_regr         clip= 0.000%  crush=  0.09%  meanL=  38.0  PASS (xfail-marked row passed)  (dawn trench shadow, p4/p5/p6-documented)
+mc_day_regr              clip= 0.000%  crush=  0.00%  meanL= 167.1  PASS  (p8 regression row)
+mc_dawn_regr             clip= 0.000%  crush=  9.76%  meanL= 120.9  PASS  (p8 regression row; the recorded §8.3 dawn config &lt=3.0 — p2's measured pitch sweep; the lt-less row re-measured the known flat-on dawn physics 33.6% raw and is NOT comparable — p2 lesson re-learned)
+shadow_day_regr          clip= 0.000%  crush=  0.00%  meanL= 221.4  PASS  (p8 harness row)
+
+== harness sanity ==
+determinism (dusk rep)   diff>8:  0.004% of ROI  mean|d|= 0.00  PASS
+
+== evidence A/Bs (not gate rows) ==
+lamp_bloom_alive (night) diff>8: 22.443% of ROI  mean|d|= 7.36  PASS
+grain_renders (dusk)     diff>1.5: 66.269% of ROI  mean|d|= 2.23  PASS
+
+== raw (tv=1) evidence rows — attribution only ==
+(day raw carries the p2 obs.① sun-side sky clip: unchanged by p9, owned upstream)
+raw_day                  clip= 2.778%  crush=  0.00%  meanL= 138.8  XFAIL  (day-sky clip family, p2 obs.①)
+raw_dawn                 clip= 0.000%  crush= 32.62%  meanL=  50.5  XFAIL  (dawn valley-floor physics)
+raw_dusk                 clip= 0.000%  crush=  2.54%  meanL=  65.6  PASS  
+raw_night                clip= 0.000%  crush= 94.10%  meanL=   3.4  PASS  
+
+OVERALL: PASS
