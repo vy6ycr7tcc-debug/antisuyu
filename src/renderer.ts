@@ -38,7 +38,14 @@ export const CinematicShader = {
     uniforms: {
         "tDiffuse": { value: null },
         "amount": { value: 0.0015 },
-        "time": { value: 0.0 }
+        "time": { value: 0.0 },
+        // Phase 9 V-POST: the §5.4 vignette/grain amplitudes move to uniforms so
+        // the attribution A/Bs (&vs= / &gs=) and the measured retune can drive
+        // them at runtime. The grade is display-referred (see main.ts J8 note):
+        // vignette 0.55 was tuned pre-tonemap and measured too heavy in display
+        // space — p9 sweep retuned 0.55 → 0.25 (§5.4 amendment).
+        "vignetteStrength": { value: 0.25 },
+        "grainAmount": { value: 0.035 }
     },
     vertexShader: `
         varying vec2 vUv;
@@ -51,6 +58,8 @@ export const CinematicShader = {
         uniform sampler2D tDiffuse;
         uniform float amount;
         uniform float time;
+        uniform float vignetteStrength;
+        uniform float grainAmount;
         varying vec2 vUv;
 
         // Simple noise function
@@ -73,11 +82,11 @@ export const CinematicShader = {
             vec3 col = vec3(r, g, b);
 
             // Vignette
-            float factor = clamp(1.0 - length(uv - 0.5) * 0.55, 0.0, 1.0);
+            float factor = clamp(1.0 - length(uv - 0.5) * vignetteStrength, 0.0, 1.0);
             col *= factor;
 
             // Film Grain
-            float noise = (random(uv + mod(time, 10.0)) - 0.5) * 0.035;
+            float noise = (random(uv + mod(time, 10.0)) - 0.5) * grainAmount;
             col += noise;
 
             gl_FragColor = vec4(col, 1.0);
