@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import { getGlobalTerrainHeight } from './terrain.js';
+import { waterDepthAt } from './river.js';
 import {
   createFoliageCardTexture, createMistTexture, createNormalTexture,
   type FoliageCardKind,
@@ -607,6 +608,14 @@ export class DecorManager {
 
     const gap = pal.riverGap ?? 22;
     if (Math.abs(fx) < gap) return; // river bed exclusion
+    // p5 cross-file touch: the Phase 5 water solve filled the carved trench
+    // (up to ±60 m in wide sections — the old riverGap was tuned against the
+    // dry-bed read). Vegetation standing in the river fails the §8.3
+    // photograph test; rocks deliberately stay (half-submerged boulders are
+    // the §2.4 bank vocabulary) and mist stays (over-water mist intended).
+    // 0.25 m: the trench walls are steep, so the visible waterline contour
+    // is sharp — anything deeper than ankle-water is out.
+    if (waterDepthAt(fx, fz) > 0.25) return;
 
     const y = getGlobalTerrainHeight(fx, fz);
     if (pal.snowFade) {
