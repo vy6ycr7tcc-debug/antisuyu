@@ -28,14 +28,23 @@ export class PhysicsSystem {
     return this.isFallback ? null : RAPIER;
   }
 
-  raycastDown(x: number, y: number, z: number, maxDistance: number = 100): number | null {
+  raycastDown(x: number, y: number, z: number, maxDistance: number = 100,
+              excludeBody?: RAPIER.RigidBody): number | null {
       if (this.isFallback || !this.world || !this.ray) return null;
 
       this.ray.origin.x = x;
       this.ray.origin.y = y;
       this.ray.origin.z = z;
 
-      const hit = this.world.castRay(this.ray, maxDistance, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC); // or appropriate flags
+      // excludeBody: the caller's own rigid body. The character's ground probe
+      // starts 2 m above her feet — inside/above her own kinematic capsule —
+      // and without the exclusion the ray hits HER, returning the capsule-top
+      // height (y + 0.9): the character then "stands" on herself and levitates
+      // +0.9 m per update (measured: shot-mode catch-up lifted her exactly
+      // 0.9 m/step until the probe plateaued). Same failure every play frame.
+      const hit = this.world.castRay(this.ray, maxDistance, true,
+          RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined,
+          excludeBody ?? undefined);
       if (hit) {
           return y - hit.timeOfImpact;
       }
