@@ -1,0 +1,22 @@
+capture                    clip%  crush%  meanL  verdict
+atmos_cf_shafts_dawn  0.000%   9.96%  108.9  PASS
+atmos_cf_shafts_day    0.000%   0.00%  183.6  PASS
+atmos_cf_shafts_night  0.000%  72.03%    8.3  PASS
+atmos_sierra_dust_day  0.000%   0.00%  189.8  PASS
+atmos_jungle_pollen    0.000%   0.00%  192.7  PASS
+atmos_paititi_dawn     0.000%  23.40%   56.2  XFAIL (known delta, documented)
+atmos_vista_day        0.000%   0.00%  187.4  PASS
+atmos_cf_dawn_LOW      0.000%   9.54%  109.9  PASS
+atmos_sierra_day_390   0.000%   0.00%  184.9  PASS
+valley_day_regr        0.000%   0.00%  132.1  PASS
+valley_dawn_regr       0.000%  10.56%   33.5  XFAIL (known delta, documented)
+terrain_sierra_regr    0.000%   0.00%  164.6  PASS
+region_cf_dawn_regr    0.000%   0.00%  103.9  PASS
+
+mote motion A/B t0→t4: ROI mean|d|=0.877  p99=26.0  frac(|d|>8)=2.23%
+mote motion gate (>0.5% of ROI pixels displaced >8): PASS
+presence A/B cf_shafts : ROI mean|d|=0.266  frac(|d|>8)=0.42%  (present — PASS)
+presence A/B sierra_dust: ROI mean|d|=0.105  frac(|d|>8)=0.26%  (present — PASS)
+shaft-band column delta: p99=2.38  max=4.17  (hard-edge indicator: isolated spikes > 6; smooth scene < ~3)
+
+OVERALL: PASS
