@@ -220,7 +220,10 @@ async function init() {
 
   setupEnvironment(scene, quality, renderer, todParam);
   const terrainManager = createTerrain(scene, renderCaps);
-  const river = createRiver(scene);
+  // §7.2: river takes RenderCaps (the old callsite passed nothing — the
+  // WebGPU transmission branch never ran and tier rules never applied).
+  // &nf=1 disables the foam band (p5 foam A/B isolation).
+  const river = createRiver(scene, renderCaps, { foam: urlParams.get('nf') !== '1' });
   // §7.2: decor takes RenderCaps (the old callsite passed nothing — tier
   // counts/shadow rules never applied and the WebGPU wind branch was dead).
   const decor = createDecor(scene, renderCaps);
@@ -502,7 +505,11 @@ async function init() {
       const lt = parseFloat(urlParams.get('lt') || '0.9');
       camera.lookAt(wallX, wallBase + lt, wallZ);
     } else if (shot === 'river_crossing') {
-      character.teleport(0, 0, Math.PI / 2);
+      // East rim of the channel: with the Phase 5 water solve the trench at
+      // x=0 holds ~6 m of water — the old (0, 0) teleport stands her on the
+      // submerged bed. x=16 sits ~2.5 m above the waterline at z=0 (measured
+      // from the height field), river in frame behind her.
+      character.teleport(16, 0, Math.PI / 2);
     } else if (shot === 'terrain_check') {
       // Verification-only framing (visual bible §8.1 + T8/§4.1/§2.2–2.5):
       // biome color script, detail maps, snow line, riverbank wetness.
@@ -639,6 +646,62 @@ async function init() {
       const camY = getGlobalTerrainHeight(camX, camZ) + camH;
       camera.position.set(camX, camY, camZ);
       camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2 + num('ly', vant.ly ?? 0), lz);
+    } else if (shot === 'water_check') {
+      // Verification-only framing (visual bible §8 + §7.5/§5.2 T6/§2.4):
+      // water body fill, Beer-Lambert depth read, edge foam, flow. `&v=`
+      // picks the vantage; cx/cz/lx/lz/cd/ch/ly generic overrides as in
+      // terrain_check/foliage_check; &nf=1 disables foam (A/B isolation).
+      const v = urlParams.get('v') || 'run';
+      const vantages: Record<string, { cx: number; cz: number; look: [number, number]; ly?: number; ch?: number; cd?: number }> = {
+        // wide slow section at z≈55 (measured: water spans x −50…45, 6 m
+        // deep at center) — camera on the east shoulder looking WNW across
+        // the water toward the far bank. First aim (58,60)→(−30,78) gazed
+        // ~6 m ABOVE the water plane at 90 m (hill-filled frame) — the
+        // working aim crosses the surface at ~65 m.
+        run: { cx: 45, cz: 55, look: [-20, 70], ch: 4 },
+        // deep pool close-up at the z=0 narrows (trench floor −10, 6 m
+        // column) — low camera, near bank foam in the foreground band.
+        pool: { cx: 26, cz: 4, look: [-14, 16], ch: 3.2 },
+        // §2.4 dark-water stretch (z < −400 jungle band): near-black green
+        // blend + foam on the banks. North-facing aim — the day sun (az 135)
+        // sky-glow whiteout wiped the first SSE attempt (p3's sun-ward rule).
+        jungle_dark: { cx: 25, cz: -520, look: [-5, -450], ch: 4, ly: 2 },
+        // waterline close-up: shore foam band + depth fade read (camera
+        // looks across the shelf at grazing incidence).
+        bank_foam: { cx: 30, cz: -30, look: [0, -46], ch: 2.2 },
+        // DAWN rows (measured §8.3 sweeps, p5): at the 6° dawn sun the whole
+        // trench is in wall shadow — the passing recipe is a LOW camera over
+        // the water surface (sky-mirror fill) with the lit east bank as the
+        // foreground anchor. run_dawnlit 9.70% crush, pool_dawnlit 8.82%
+        // (both PASS <10); the standard day aims crush 13.9–29%.
+        run_dawnlit: { cx: 20, cz: 30, look: [-30, 55], ch: 1.5, cd: 8 },
+        pool_dawnlit: { cx: 20, cz: 45, look: [-30, 65], ch: 1.5, cd: 8 },
+        // DUSK row (measured): the day aim mirrors the bright west sky and
+        // clips 6.76% >254.5 (gate 2%); the north aim keeps the sun quadrant
+        // out of the water streak — 0.000% clip / 5.33% crush.
+        run_duskaim: { cx: 45, cz: 55, look: [0, 140], ch: 4 },
+      };
+      const vant = vantages[v] || vantages.run;
+      const num = (k: string, d: number) => {
+        const s = urlParams.get(k);
+        return s === null ? d : parseFloat(s);
+      };
+      const VX = { cx: num('cx', vant.cx), cz: num('cz', vant.cz), lx: 0, lz: 0 };
+      VX.lx = num('lx', vant.look[0]);
+      VX.lz = num('lz', vant.look[1]);
+      const camDist = num('cd', vant.cd ?? 10), camH = num('ch', vant.ch ?? 4);
+      const [lx, lz] = [VX.lx, VX.lz];
+      const dx = lx - VX.cx, dz = lz - VX.cz;
+      const dl = Math.max(0.001, Math.hypot(dx, dz));
+      const ux = dx / dl, uz = dz / dl;
+      const camX = VX.cx - ux * camDist, camZ = VX.cz - uz * camDist;
+      // Character parks behind the camera (chunk loader follows her), out
+      // of frame — the frame is water-only.
+      character.teleport(camX - ux * 10, camZ - uz * 10, 0);
+      character.disableCameraUpdate = true;
+      const camY = getGlobalTerrainHeight(camX, camZ) + camH;
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2 + num('ly', vant.ly ?? 0), lz);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
       character.disableCameraUpdate = true;
@@ -655,7 +718,9 @@ async function init() {
       character.teleport(0, 10, 0);
       physics.createRopeBridge(scene, new THREE.Vector3(0, 20, -50), new THREE.Vector3(0, 20, 50));
     } else if (shot === 'buoyancy') {
-      character.teleport(0, 2, 20); // Stand near river looking at it
+      // Bank position (p5): the trench at x=0 now holds water — spawn her on
+      // the east shoulder so the shot frames logs dropping INTO the river.
+      character.teleport(16, 2, 20);
       physics.spawnBuoyantDebris(scene, 10);
     } else {
       character.teleport(0, 0, 0);
@@ -682,6 +747,9 @@ async function init() {
     // Place foliage around the shot camera; ?t= drives the T5 wind clock so
     // two captures at different t show the §8.3 motion-ready displacement.
     decor.update(camera, tStr ? parseFloat(tStr) : 0);
+    // p5: same discipline for the water flow clock — ?t= drives the scroll
+    // uniforms so two captures at different t show §8.3 water motion.
+    river.update(tStr ? parseFloat(tStr) : 0);
 
     // Shot-time chunk streaming (p4): the origin-centered chunk disc is
     // circle-culled (corners beyond chunk radius 4 unload), leaving fog-void
@@ -800,6 +868,9 @@ async function init() {
     // not-yet-existing uniform object (the t0/t2 A/B pair diffed to exactly
     // zero — p4 gate audit caught it). Uniforms exist after render #1.
     decor.update(camera, tStr ? parseFloat(tStr) : 0);
+    // p5: re-apply the water flow clock AFTER first-render compilation, same
+    // reasoning as decor above.
+    river.update(tStr ? parseFloat(tStr) : 0);
     // Render once and signal ready
     if (!skipPost) {
         if (isWebGPU && postProcessing) {

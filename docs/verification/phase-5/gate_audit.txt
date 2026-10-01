@@ -1,0 +1,27 @@
+capture                  clip%  crush%  meanL  verdict
+water_run_day        0.000%   0.00%  163.9  PASS
+water_run_dawn       0.000%   9.69%   72.6  PASS
+water_run_dusk       0.000%   5.31%   96.2  PASS
+water_run_night      0.000%  64.81%    8.8  PASS
+water_pool_day       0.000%   0.00%  119.1  PASS
+water_pool_dawn      0.000%   9.03%   72.4  PASS
+water_jungle_dark_d  0.000%   0.00%  145.1  PASS
+water_jungle_darkaw  0.000%  28.19%   52.0  XFAIL (known delta, documented)
+water_bank_foam_day  0.000%   0.00%  114.7  PASS
+water_run_day_LOW    0.000%   0.00%  166.2  PASS
+water_run_day_390    0.000%   0.00%  155.1  PASS
+water_pool_dawn_390  0.000%   9.42%   67.4  PASS
+valley_day_regr      0.000%   0.00%  132.1  PASS
+valley_dawn_regr     0.000%  10.56%   33.5  XFAIL (known delta, documented)
+river_crossing_day   0.000%   0.00%   98.6  PASS
+river_crossing_dawn  0.000%  41.52%   16.8  XFAIL (known delta, documented)
+terrain_river_regr   0.000%   0.00%  162.4  PASS
+buoyancy_day_regr    0.000%   0.00%   99.9  PASS
+
+flow A/B t0→t4: water-ROI mean|d|=18.008  p99=90.0  frac(|d|>8)=50.24%
+flow motion gate (>0.5% water pixels displaced >8): PASS
+foam A/B on/off: shore-band mean|d|=18.26 (band present if > 6)
+foam presence gate: PASS
+depth read: deep-basin meanL=76.2 (dark-water read < 90 expected)
+
+OVERALL: PASS
