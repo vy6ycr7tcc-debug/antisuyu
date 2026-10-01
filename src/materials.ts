@@ -427,13 +427,15 @@ export function fabricWorn(hex: number): THREE.MeshStandardMaterial {
     });
 }
 
-// Leather dark (gear, straps)
+// Leather dark (gear, straps) — p7: roughness variation wired (same noise map
+// the other organic factories use; §4.1 "roughness story" at pack/strap scale)
 export function leatherDark(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: 0x2C1A10,
         roughness: 0.75,
         metalness: 0.05,
         normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
         envMapIntensity: 1.0,
     });
 }
@@ -522,32 +524,82 @@ function getHairDetail(): THREE.DataTexture {
   return detailCache.hair;
 }
 
-// Skin Naira (SSS approximation + pore micro-normal)
-export function skinNaira(): THREE.MeshPhysicalMaterial {
-    return new THREE.MeshPhysicalMaterial({
-        color: 0x8D5524,
-        roughness: 0.6,           // skin 0.55–0.65
-        metalness: 0.0,
-        transmission: 0.1,        // fake SSS (kept subtle — no glow, §4.4 spirit)
-        thickness: 0.5,
-        clearcoat: 0.1,
-        normalMap: getSkinDetail().normal,
-        normalScale: new THREE.Vector2(0.35, 0.35),
-        envMapIntensity: 1.0,
-    });
+// p7 gate A/B suspension (&ncm=1 in main.ts): the character detail maps wired
+// in this phase must PROVE they render — the p4 wind lesson (an injection that
+// diffs to exactly zero is inert). With maps disabled the factories return the
+// pre-p7 flat-surface read for the A/B pair.
+let characterMapsEnabled = true;
+export function setCharacterDetailMapsEnabled(v: boolean): void {
+  characterMapsEnabled = v;
 }
 
-// Cloth Field (weather-worn field clothing + weave normal)
-export function clothField(): THREE.MeshPhysicalMaterial {
-    return new THREE.MeshPhysicalMaterial({
-        color: 0x4A5D23,
-        roughness: 0.95,          // cloth 0.9–1.0
+// Skin Naira — §4.1 skin roughness 0.55–0.65. p7 audit fixes:
+//  - roughnessMap WAS GENERATED BUT NEVER WIRED (the audit found it): pore
+//    map (mean ~0.55, T-zone lows to 0.40) now multiplies base 1.0 — nominal
+//    roughness lands at the §4.1 floor with oily-zone catchlights.
+//  - transmission 0.1 "fake SSS" measured a no-op at 2 m (p7 A/B) while paying
+//    the transmissive-pass cost — replaced by sheen (peach-fuzz back-scatter),
+//    which the §4.4 spirit prefers: no glow, no extra render pass.
+//  - pore normalScale 0.35 → 0.5: the pores were invisible at the 2 m audit
+//    distance; 0.5 keeps them sub-millimeter but present.
+export function skinNaira(): THREE.MeshPhysicalMaterial {
+    const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x8D5524,
+        roughness: 1.0,           // × pore map (0.40–0.70) — see note above
         metalness: 0.0,
-        clearcoat: 0.0,
-        normalMap: getClothDetail().normal,
-        normalScale: new THREE.Vector2(0.5, 0.5),
+        sheen: 0.3,
+        sheenRoughness: 0.5,
+        sheenColor: 0xFFD9B0,     // warm peach-fuzz — restrained, §2.1 accent rules
+        clearcoat: 0.05,          // sweat sheen (was 0.1 alongside transmission)
         envMapIntensity: 1.0,
     });
+    if (characterMapsEnabled) {
+        mat.normalMap = getSkinDetail().normal;
+        mat.normalScale = new THREE.Vector2(0.5, 0.5);
+        mat.roughnessMap = getSkinDetail().roughness;
+    }
+    return mat;
+}
+
+// Cloth Field — §4.1 cloth roughness 0.9–1.0, "weather-worn, never clean"
+// (§1.2 Tomb Raider row). p7 audit fixes:
+//  - roughnessMap WAS GENERATED BUT NEVER WIRED: weave map (mean ~0.86,
+//    thread-crest polish lows 0.80) × base 1.08 → effective 0.86–1.0 — the
+//    crest sheen IS the wear story.
+//  - weave normalScale 0.5 → 0.3: at the 2 m audit distance the 8 px thread
+//    pattern aliased into moiré scanlines; 0.3 keeps a fabric read without
+//    the interference.
+export function clothField(): THREE.MeshPhysicalMaterial {
+    const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x4A5D23,          // field-jacket olive (§2 quipu-dye family)
+        roughness: 1.08,          // × weave map (0.80–0.92, clamped ≤1.0)
+        metalness: 0.0,
+        envMapIntensity: 1.0,
+    });
+    if (characterMapsEnabled) {
+        mat.normalMap = getClothDetail().normal;
+        mat.normalScale = new THREE.Vector2(0.3, 0.3);
+        mat.roughnessMap = getClothDetail().roughness;
+    }
+    return mat;
+}
+
+// Cloth field — pants tone (p7): torso and legs shared ONE flat olive, reading
+// as a bodysuit; the darker ground-grime tone splits the costume into jacket +
+// work pants (§1.2: weather-worn; ground contact takes the grime).
+export function clothFieldDark(): THREE.MeshPhysicalMaterial {
+    const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x3B4A1E,          // darker olive — ground-grime tone
+        roughness: 1.0,           // muddiest cloth: map × 1.0 clamps at 1.0 in dips
+        metalness: 0.0,
+        envMapIntensity: 1.0,
+    });
+    if (characterMapsEnabled) {
+        mat.normalMap = getClothDetail().normal;
+        mat.normalScale = new THREE.Vector2(0.3, 0.3);
+        mat.roughnessMap = getClothDetail().roughness;
+    }
+    return mat;
 }
 
 // Hair Dark (braid; strand roughness streaks + anisotropic highlight)
