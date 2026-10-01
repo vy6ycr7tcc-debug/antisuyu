@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { RendererQuality } from './renderer.js';
 import { TOD_GRADES } from './environment.js';
 
+const UP = new THREE.Vector3(0, 1, 0);
+const FORWARD = new THREE.Vector3(0, 0, -1);
+
 export interface LightRigConfig {
   sunColor: number;
   sunIntensity: number;
@@ -19,7 +22,7 @@ export interface LightRigConfig {
 
 export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
   applyGrade(grade: keyof typeof TOD_GRADES): void;
-  update(playerPos: THREE.Vector3): void;
+  update(playerPos: THREE.Vector3, camera?: THREE.Camera): void;
   sun: THREE.DirectionalLight;
 } {
   const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -59,8 +62,12 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
   const cameraFill = new THREE.DirectionalLight(0xCFD8E8, 0.35);
   cameraFill.castShadow = false;
   scene.add(cameraFill);
+  scene.add(cameraFill.target);
 
-  let currentSunDir = new THREE.Vector3(0, 1, 0);
+  // Persistent direction vectors — no per-frame allocations (visual bible §6.3).
+  const currentSunDir = new THREE.Vector3(0, 1, 0);
+  const currentMoonDir = new THREE.Vector3(0, -1, 0);
+  const _cameraForward = new THREE.Vector3();
 
   return {
     sun: sunLight,
@@ -74,33 +81,44 @@ export function createLightRig(scene: THREE.Scene, quality: RendererQuality): {
         moonLight.intensity = g.sunIntensity; // 0.5 from config
         moonLight.castShadow = true;
         moonLight.color.setHex(g.sunColor); // 0x9FB8DD from config
+        // Night row of §2.6: the graded "sun" slot describes the MOON
+        // (elev 35°, az 270°). The sun itself is parked below the horizon.
+        const phi = THREE.MathUtils.degToRad(90 - g.sunElevationDeg);
+        const theta = THREE.MathUtils.degToRad(g.sunAzimuthDeg);
+        currentMoonDir.setFromSphericalCoords(1, phi, theta);
+        currentSunDir.set(0, -1, 0);
       } else {
         sunLight.intensity = g.sunIntensity;
         sunLight.castShadow = true;
         moonLight.intensity = 0;
         moonLight.castShadow = false;
+        const phi = THREE.MathUtils.degToRad(90 - g.sunElevationDeg);
+        const theta = THREE.MathUtils.degToRad(g.sunAzimuthDeg);
+        currentSunDir.setFromSphericalCoords(1, phi, theta);
+        currentMoonDir.copy(currentSunDir).negate();
       }
       hemiLight.color.setHex(g.hemiSky);
       hemiLight.groundColor.setHex(g.hemiGround);
       hemiLight.intensity = g.hemiIntensity;
       cameraFill.intensity = g.fillIntensity;
-
-      const phi = THREE.MathUtils.degToRad(90 - g.sunElevationDeg);
-      const theta = THREE.MathUtils.degToRad(g.sunAzimuthDeg);
-      currentSunDir.setFromSphericalCoords(1, phi, theta);
     },
-    update(playerPos: THREE.Vector3) {
+    update(playerPos: THREE.Vector3, camera?: THREE.Camera) {
       sunLight.position.copy(playerPos).addScaledVector(currentSunDir, 300);
       sunLight.target.position.copy(playerPos);
 
-      // Moon is opposite to the sun
-      const currentMoonDir = currentSunDir.clone().negate();
       moonLight.position.copy(playerPos).addScaledVector(currentMoonDir, 300);
       moonLight.target.position.copy(playerPos);
 
-      const cameraForward = new THREE.Vector3(0, 0, -1);
-      const up = new THREE.Vector3(0, 1, 0);
-      cameraFill.position.copy(playerPos).addScaledVector(cameraForward, -50).addScaledVector(up, 30);
+      // Camera fill (§3.1): camera position + camera forward × −50 + up × 30,
+      // aimed at the player. Falls back to the player-relative rig when no
+      // camera is supplied.
+      if (camera) {
+        camera.getWorldDirection(_cameraForward);
+        cameraFill.position.copy(camera.position).addScaledVector(_cameraForward, -50).addScaledVector(UP, 30);
+      } else {
+        cameraFill.position.copy(playerPos).addScaledVector(FORWARD, -50).addScaledVector(UP, 30);
+      }
+      cameraFill.target.position.copy(playerPos);
     }
   };
 }

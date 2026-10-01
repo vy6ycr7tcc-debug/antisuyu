@@ -1,7 +1,7 @@
 import { registerServiceWorker, mountOfflineUI } from "./pwa/offline.js";
 import * as THREE from 'three';
 import { createRenderer, getRenderCaps, QUALITY_TIERS } from './renderer.js';
-import { setupEnvironment } from './environment.js';
+import { setupEnvironment, getActiveLightRig } from './environment.js';
 import { createTerrain } from './terrain.js';
 import { createRiver } from './river.js';
 import { createDecor } from './decor.js';
@@ -9,6 +9,9 @@ import { CharacterController } from './character.js';
 import { InputManager } from './input.js';
 import { TouchControls } from './touch/controls.js';
 import { WebGPURenderer } from 'three/webgpu';
+import type { PostProcessing } from 'three/webgpu';
+import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import type { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { physics } from './physics.js';
 import { initUI, updateUI } from './ui/index.js';
 import { ParticleSystem } from './particles.js';
@@ -27,6 +30,8 @@ declare global {
     __frameStats?: { fps: number; low1Percent: number; };
     __reducedMotion?: boolean;
     __currentQualityTier?: 'HIGH' | 'MEDIUM' | 'LOW';
+    __rendererType?: 'webgpu' | 'webgl2';
+    __frameDataURL?: string;
   }
 }
 
@@ -40,7 +45,7 @@ async function init() {
   // QUALITY BLOCK START (frame stats & adaptive quality)
   let quality = initialQuality;
   window.__currentQualityTier = quality.tier;
-  const renderCaps = getRenderCaps(renderer as any, quality);
+  const renderCaps = getRenderCaps(renderer, quality);
 
   const frameTimes: number[] = [];
   const maxFrames = 120;
@@ -102,7 +107,7 @@ async function init() {
     window.__currentQualityTier = quality.tier;
     renderCaps.tier = quality.tier;
     renderer.setPixelRatio(quality.pixelRatio);
-    renderer.shadowMap.type = (newTier === 'LOW' && !renderCaps.isWebGPU) ? THREE.PCFShadowMap : (renderCaps.isWebGPU ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap);
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     console.log(`Adaptive quality changed to ${newTier}`);
   }
 
@@ -250,27 +255,27 @@ async function init() {
   }
 
   // V-POST: post-processing block start
-  let composer: any = null;
-  let cinematicPass: any = null;
-  let postProcessing: any = null;
+  let composer: EffectComposer | null = null;
+  let cinematicPass: ShaderPass | null = null;
+  let postProcessing: PostProcessing | null = null;
   const isWebGPU = renderer instanceof WebGPURenderer;
   const skipPost = urlParams.get('tv') === '1';
 
-  const envMod = await import('./environment.js');
-  const gradeKey = (todParam || 'day') as keyof typeof envMod.TOD_GRADES;
-  const grade = envMod.TOD_GRADES[gradeKey] || envMod.TOD_GRADES['day'];
-
   if (!skipPost) {
       if (isWebGPU) {
-          // WebGPU TSL Post Processing
-          const { pass, uv, float, vec4, Fn, vec2, time, fract, mod, color, toneMapping } = await import('three/tsl' as any);
-          const { PostProcessing } = await import('three/webgpu');
+          // WebGPU TSL Post Processing.
+          // Tone mapping + exposure are NOT applied here: PostProcessing's
+          // default output transform already applies renderer.toneMapping
+          // (ACES) and renderer.toneMappingExposure (set from the TOD grade
+          // in environment.ts). Adding them in-graph double-grades the frame
+          // to white — visual bible §5.4.
+          const { pass, uv, float, vec4, Fn, vec2, fract } = await import('three/tsl');
+          const { PostProcessing: PostProcessingCtor } = await import('three/webgpu');
           const { bloom } = await import('three/examples/jsm/tsl/display/BloomNode.js');
 
           const scenePass = pass( scene, camera );
 
-          // Bloom full res on WebGPU HIGH, otherwise half resolution or no bloom if disabled
-          // A budget optimization for WebGPU medium/low tiers as well
+          // Bloom: strength 0.35, radius 0.4, threshold 0.85 (§5.4)
           const bloomPass = bloom(scenePass, 0.35, 0.4, 0.85);
 
           const random = Fn(([p]: [any]) => {
@@ -278,13 +283,13 @@ async function init() {
               return fract(p.dot(K1).cos().mul(12345.6789));
           });
 
-          const { convertToTexture } = await import('three/tsl' as any);
+          const { convertToTexture } = await import('three/tsl');
 
           const cinematicNode = Fn( ( [ inputNode ]: [any] ) => {
              const uvNode = uv();
              const texNode = convertToTexture(inputNode);
 
-             // Chromatic Aberration
+             // Chromatic Aberration — channel-resampled at the source texture
              const offset = vec2(0.0015, 0.0);
              const r = texNode.sample(uvNode.add(offset)).r;
              const g = texNode.sample(uvNode).g;
@@ -297,39 +302,25 @@ async function init() {
              const factor = float(1.0).sub(dist.mul(0.55)).clamp(0.0, 1.0);
              col = vec4(col.rgb.mul(factor), col.a);
 
-             // Film Grain - static to ensure deterministic frames for A/B convergence.
-             // Using mod(time, 0.0) or simply uv so it's always the same frame for ?shot=
+             // Film Grain — static to ensure deterministic frames for A/B convergence.
              const noise = random(uvNode).sub(0.5).mul(0.035);
              col = vec4(col.rgb.add(noise), col.a);
 
              return col;
           } );
 
-          postProcessing = new PostProcessing( renderer as WebGPURenderer );
-
-          // Color Grading matching TOD_GRADES intent
-          const colorGradingNode = Fn(([inputColor]: [any]) => {
-              // Apply basic color grading tint based on ToD. This scales the colors based on sunColor and exposure.
-              const sunTint = color(grade.sunColor).mul(grade.exposure);
-              // Normalize the tint so we don't blow out the image completely
-              return vec4(inputColor.rgb.mul(sunTint).mul(float(0.8)), inputColor.a);
-          });
-
-          const cinematic = cinematicNode(bloomPass);
-          const graded = colorGradingNode(cinematic);
-
-          // Output tone mapped
-          postProcessing.outputNode = toneMapping(THREE.ACESFilmicToneMapping, grade.exposure, graded);
+          postProcessing = new PostProcessingCtor( renderer as WebGPURenderer );
+          postProcessing.outputNode = cinematicNode(bloomPass);
 
       } else {
-          // WebGL2 Post Processing
-          const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+          // WebGL2 Post Processing — same grade as the WebGPU graph (§5.4).
+          const { EffectComposer: EffectComposerCtor } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
           const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
           const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
           const { ShaderPass } = await import('three/examples/jsm/postprocessing/ShaderPass.js');
           const { OutputPass } = await import('three/examples/jsm/postprocessing/OutputPass.js');
 
-          composer = new EffectComposer(renderer as THREE.WebGLRenderer);
+          composer = new EffectComposerCtor(renderer as THREE.WebGLRenderer);
           const renderPass = new RenderPass(scene, camera);
           composer.addPass(renderPass);
 
@@ -337,35 +328,6 @@ async function init() {
           const bloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
           const bloomPass = new UnrealBloomPass(bloomRes, 0.35, 0.4, 0.85);
           composer.addPass(bloomPass);
-
-          // WebGL2 color grading pass matching TOD_GRADES intent
-          const colorGradingShader = {
-              uniforms: {
-                  tDiffuse: { value: null },
-                  sunColor: { value: new THREE.Color(grade.sunColor) },
-                  exposure: { value: grade.exposure }
-              },
-              vertexShader: `
-                  varying vec2 vUv;
-                  void main() {
-                      vUv = uv;
-                      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                  }
-              `,
-              fragmentShader: `
-                  uniform sampler2D tDiffuse;
-                  uniform vec3 sunColor;
-                  uniform float exposure;
-                  varying vec2 vUv;
-                  void main() {
-                      vec4 tex = texture2D(tDiffuse, vUv);
-                      vec3 graded = tex.rgb * sunColor * exposure * 0.8;
-                      gl_FragColor = vec4(graded, tex.a);
-                  }
-              `
-          };
-          const colorGradingPass = new ShaderPass(colorGradingShader);
-          composer.addPass(colorGradingPass);
 
           cinematicPass = new ShaderPass(CinematicShader);
           // Set deterministic time for WebGL2 grain
@@ -435,6 +397,18 @@ async function init() {
       }
     } else if (shot === 'valley_overview') {
       character.teleport(0, 400, Math.PI);
+    } else if (shot === 'sky_check') {
+      // Verification-only framing (visual bible §8): horizon view with a slight
+      // up-tilt so the sky dome + sun/moon discipline is auditable. `az` (deg)
+      // picks the facing: az 135 = into the day sun; az 315 = anti-sun for the
+      // blue-gradient check. Day: sun disc (elev 25°, az 135°). Night: sky-sun
+      // parked BELOW the horizon (elev −12°, az 90°) — dome must read as night.
+      character.teleport(0, 60, 0);
+      character.disableCameraUpdate = true;
+      camera.position.set(0, 60, 0);
+      const azDeg = parseFloat(urlParams.get('az') || '135');
+      const azRad = THREE.MathUtils.degToRad(azDeg);
+      camera.lookAt(Math.sin(azRad) * 99, 78, Math.cos(azRad) * 99);
     } else if (shot === 'river_crossing') {
       character.teleport(0, 0, Math.PI / 2);
     } else if (shot === 'character_closeup') {
@@ -471,6 +445,9 @@ async function init() {
         river.update(i * dt);
       }
     }
+
+    // Sun/shadow rig follows the shot's viewpoint (§3.2)
+    getActiveLightRig()?.update(camera.position, camera);
   } else {
     if (urlParams.get('load') === '1') {
       const data = saveAPI.load(0);
@@ -513,6 +490,7 @@ async function init() {
       regionManager.update(character.mesh.position);
       river.update(time);
       decor.update(camera);
+      getActiveLightRig()?.update(character.mesh.position, camera);
 
       dustParticles.update(camera.position, 'dust');
       leavesParticles.update(camera.position, 'leaves');
@@ -575,6 +553,43 @@ async function init() {
         if (renderer instanceof WebGPURenderer) {
            await renderer.renderAsync(scene, camera);
         }
+    }
+
+    // Verification readback (?readback=1): headless SwiftShader cannot present
+    // WebGPU frames to the canvas, so expose the final post-processed frame as
+    // a data URL for the capture tool. Only active in shot mode with the
+    // explicit parameter — zero cost during normal play.
+    if (urlParams.get('readback') === '1' && isWebGPU) {
+      try {
+        const { RenderTarget } = await import('three/webgpu');
+        // SwiftShader (headless CI) is unstable for large/heavy readbacks, so
+        // capture at a reduced resolution — enough to judge the grade.
+        const w = 640;
+        const h = 400;
+        const rt = new RenderTarget(w, h);
+        renderer.setRenderTarget(rt);
+        if (!skipPost && postProcessing) {
+          postProcessing.render();
+        } else {
+          await renderer.renderAsync(scene, camera);
+        }
+        const buf = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
+        const rgba = new Uint8ClampedArray(buf);
+        const row = w * 4;
+        const flipped = new Uint8ClampedArray(rgba.length);
+        for (let y = 0; y < h; y++) {
+          flipped.set(rgba.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+        }
+        for (let i = 3; i < flipped.length; i += 4) flipped[i] = 255;
+        const cnv = document.createElement('canvas');
+        cnv.width = w; cnv.height = h;
+        cnv.getContext('2d')?.putImageData(new ImageData(flipped, w, h), 0, 0);
+        window.__frameDataURL = cnv.toDataURL('image/png');
+        renderer.setRenderTarget(null);
+        rt.dispose();
+      } catch (e) {
+        console.error('Verification readback failed:', e);
+      }
     }
 
     setTimeout(() => {

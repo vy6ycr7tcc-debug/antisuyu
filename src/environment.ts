@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RendererQuality } from './renderer.js';
+import { WebGPURenderer, PMREMGenerator as WebGPUPMREMGenerator } from 'three/webgpu';
 
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { SkyMesh } from 'three/examples/jsm/objects/SkyMesh.js';
@@ -12,6 +13,40 @@ declare global {
       BASE_URL: string;
     };
   }
+}
+
+/** Shape of the uniform block shared by Sky (ShaderMaterial) and SkyMesh (NodeMaterial). */
+interface UniformLike<T> { value: T }
+interface SkyUniforms {
+  turbidity: UniformLike<number>;
+  rayleigh: UniformLike<number>;
+  mieCoefficient: UniformLike<number>;
+  mieDirectionalG: UniformLike<number>;
+  sunPosition: UniformLike<THREE.Vector3>;
+}
+
+// Where uniforms live differs by class: SkyMesh (WebGPU) exposes them as direct
+// TSL uniform-node properties on the mesh ITSELF; Sky (WebGL2) exposes them on
+// material.uniforms. Probe: mesh object → material props → material.uniforms.
+function getSkyUniforms(sky: THREE.Mesh): SkyUniforms {
+  const meshProps = sky as unknown as Record<string, unknown>;
+  const mat: unknown = sky.material;
+  const matProps = mat as Record<string, unknown>;
+  const record = (mat as { uniforms?: Record<string, unknown> }).uniforms;
+  const pick = <K extends keyof SkyUniforms>(key: K): SkyUniforms[K] => {
+    const sources: unknown[] = [meshProps[key as string], matProps[key as string], record ? record[key as string] : undefined];
+    for (const src of sources) {
+      if (src && typeof src === 'object' && 'value' in src) return src as SkyUniforms[K];
+    }
+    throw new Error(`Sky uniform "${String(key)}" not found on ${sky.type}`);
+  };
+  return {
+    turbidity: pick('turbidity'),
+    rayleigh: pick('rayleigh'),
+    mieCoefficient: pick('mieCoefficient'),
+    mieDirectionalG: pick('mieDirectionalG'),
+    sunPosition: pick('sunPosition')
+  };
 }
 
 export const TOD_GRADES: Record<'day'|'dawn'|'noon'|'dusk'|'night', LightRigConfig> = {
@@ -48,6 +83,7 @@ export const TOD_GRADES: Record<'day'|'dawn'|'noon'|'dusk'|'night', LightRigConf
 };
 
 const textureLoader = new THREE.TextureLoader();
+// Emergency IBL fallback only (visual bible §5.2 T2) — used if PMREM generation throws.
 const bakedEnvTexture = textureLoader.load(`${import.meta.env.BASE_URL}env_baked.png`);
 bakedEnvTexture.mapping = THREE.EquirectangularReflectionMapping;
 bakedEnvTexture.colorSpace = THREE.SRGBColorSpace;
@@ -60,9 +96,13 @@ export function getActiveLightRig() {
   return activeRig;
 }
 
-export function setupEnvironment(scene: THREE.Scene, quality: RendererQuality, renderer: THREE.WebGLRenderer | any, todParam: string | null, regionId?: string) {
+export function setupEnvironment(scene: THREE.Scene, quality: RendererQuality, renderer: THREE.WebGLRenderer | WebGPURenderer, todParam: string | null, regionId?: string) {
   const gradeKey = (todParam || 'day') as keyof typeof TOD_GRADES;
   const grade = TOD_GRADES[gradeKey] || TOD_GRADES['day'];
+
+  // Tone mapping + exposure live on the renderer (both PostProcessing's default
+  // output transform and EffectComposer's OutputPass read them from here).
+  renderer.toneMappingExposure = grade.exposure;
 
   scene.background = new THREE.Color(grade.hemiSky);
 
@@ -89,16 +129,14 @@ export function setupEnvironment(scene: THREE.Scene, quality: RendererQuality, r
   activeRig.update(new THREE.Vector3(0, 0, 0));
 
   // Sky dome
-  let sky;
-  if (renderer && renderer.isWebGLRenderer) {
-    sky = new Sky();
-  } else {
+  const isWebGPURenderer = renderer instanceof WebGPURenderer;
+  let sky: THREE.Mesh;
+  if (isWebGPURenderer) {
     sky = new SkyMesh();
+  } else {
+    sky = new Sky();
   }
   sky.scale.setScalar(4500);
-  scene.add(sky);
-
-  const skyUniforms = (sky as any).material.uniforms || (sky as any).material;
 
   let turbidity = 10;
   let rayleigh = 2;
@@ -114,25 +152,45 @@ export function setupEnvironment(scene: THREE.Scene, quality: RendererQuality, r
   const mieCoefficient = 0.005;
   const mieDirectionalG = 0.8;
 
-  const phi = THREE.MathUtils.degToRad(90 - grade.sunElevationDeg);
-  const theta = THREE.MathUtils.degToRad(grade.sunAzimuthDeg);
+  // Sky-sun position. At night the graded "sun" slot actually describes the MOON
+  // (§2.6 night row: elev 35°); the sky shader's sun must sit below the horizon
+  // so the dome reads as night, not as a second daytime.
+  const skyElevationDeg = gradeKey === 'night' ? -12 : grade.sunElevationDeg;
+  const skyAzimuthDeg = gradeKey === 'night' ? 90 : grade.sunAzimuthDeg;
+  const phi = THREE.MathUtils.degToRad(90 - skyElevationDeg);
+  const theta = THREE.MathUtils.degToRad(skyAzimuthDeg);
   const sunPosition = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
 
-  if (renderer && renderer.isWebGLRenderer) {
-      skyUniforms[ 'turbidity' ].value = turbidity;
-      skyUniforms[ 'rayleigh' ].value = rayleigh;
-      skyUniforms[ 'mieCoefficient' ].value = mieCoefficient;
-      skyUniforms[ 'mieDirectionalG' ].value = mieDirectionalG;
-      skyUniforms[ 'sunPosition' ].value.copy(sunPosition);
-  } else {
-      const skyMaterial = (sky as any).material;
-      if (skyMaterial.turbidity) skyMaterial.turbidity.value = turbidity;
-      if (skyMaterial.rayleigh) skyMaterial.rayleigh.value = rayleigh;
-      if (skyMaterial.mieCoefficient) skyMaterial.mieCoefficient.value = mieCoefficient;
-      if (skyMaterial.mieDirectionalG) skyMaterial.mieDirectionalG.value = mieDirectionalG;
-      if (skyMaterial.sunPosition) skyMaterial.sunPosition.value.copy(sunPosition);
+  const skyUniforms = getSkyUniforms(sky);
+  skyUniforms.turbidity.value = turbidity;
+  skyUniforms.rayleigh.value = rayleigh;
+  skyUniforms.mieCoefficient.value = mieCoefficient;
+  skyUniforms.mieDirectionalG.value = mieDirectionalG;
+  skyUniforms.sunPosition.value.copy(sunPosition);
+
+  // IBL: PMREM capture of the sky on BOTH paths (visual bible §5.2 T2).
+  // The sky is temporarily reparented into a sky-only scene for the capture.
+  let environment: THREE.Texture;
+  try {
+    const pmremScene = new THREE.Scene();
+    pmremScene.add(sky);
+    if (isWebGPURenderer) {
+      const pmrem = new WebGPUPMREMGenerator(renderer);
+      const rt = pmrem.fromScene(pmremScene, 0, 1, 10000);
+      environment = rt.texture;
+      pmrem.dispose();
+    } else {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const rt = pmrem.fromScene(pmremScene, 0, 1, 10000);
+      environment = rt.texture;
+      pmrem.dispose();
+    }
+  } catch (e) {
+    console.error('IBL: PMREM sky capture failed — using baked env fallback. Reason:', e);
+    environment = bakedEnvTexture;
   }
 
-  scene.environment = bakedEnvTexture;
+  scene.add(sky);
+  scene.environment = environment;
   scene.environmentIntensity = grade.envIntensity;
 }
