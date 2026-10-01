@@ -221,7 +221,12 @@ async function init() {
   setupEnvironment(scene, quality, renderer, todParam);
   const terrainManager = createTerrain(scene, renderCaps);
   const river = createRiver(scene);
-  const decor = createDecor(scene);
+  // §7.2: decor takes RenderCaps (the old callsite passed nothing — tier
+  // counts/shadow rules never applied and the WebGPU wind branch was dead).
+  const decor = createDecor(scene, renderCaps);
+  // Verification A/B: &nm=1 suspends mist placement (isolates the mist read
+  // in §8 captures; zero cost otherwise).
+  if (urlParams.get('nm') === '1') decor.mist.prob = {};
 
   const dustParticles = new ParticleSystem(scene, 'dust');
   const leavesParticles = new ParticleSystem(scene, 'leaves');
@@ -564,6 +569,76 @@ async function init() {
       const camY = getGlobalTerrainHeight(camX, camZ) + camH;
       camera.position.set(camX, camY, camZ);
       camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2, lz);
+    } else if (shot === 'foliage_check') {
+      // Verification-only framing (visual bible §8 + §7.3/§5.2 T5/§6.3/J3):
+      // instanced foliage species per region palette, boulder rocks, valley
+      // mist, T5 wind. `&v=` picks the vantage; day aims keep the day sun
+      // (az 135) out of the frustum, dawn aims face the low east sun (az 90)
+      // — the p3-measured lesson that shadow-side aims crush >10% of frame.
+      // `&cd=`/`&ch=` override camera distance/height for framing iteration;
+      // `&cx=&cz=&lx=&lz=` generic override as in terrain_check.
+      const v = urlParams.get('v') || 'cf_floor';
+      // `ly` = look-target height offset (m). Dawn rows tilt UP toward the
+      // lit ridgeline: at the 6° dawn elevation every valley-floor bump casts
+      // a 100–200 m shadow, so a ground-level aim crushes >20% of frame —
+      // measured per vantage against §8.3 (p2's `lt` discipline).
+      const vantages: Record<string, { cx: number; cz: number; look: [number, number]; ly?: number; ch?: number }> = {
+        // cloud forest floor: broadleaf canopy + ferns + orchids + mist
+        // (look ~55 m out so 8–25 m foliage fills the foreground band; aims
+        // keep the frame on near-level contours — measured h(x,z) deltas ≤ 3 m
+        // — so the eye-height camera never stares into a hillside)
+        cf_floor: { cx: -60, cz: 100, look: [-110, 62] },
+        // dawn (measured ch/aim sweep vs §8.3): elevated camera on the high
+        // point, aim NNE across descending lit terrain, sun glow out of frame.
+        // crush 9.96% / clip 0.000%. Earlier westward aims + ly tilts crushed
+        // 18–28% (shadow faces fill the frame at any pitch — ly sweep 0/14/30/45).
+        cf_dawnlit: { cx: -140, cz: 80, look: [-100, 160], ch: 18 },
+        // sierra: ichu hillsides. Day aim runs NNW from the z 660 shoulder —
+        // the earlier WNW aim raked a sun-facing slope into bloom blowout
+        // (measured), and the z 610 dip aim stared into a 37 m climb. Dawn
+        // keeps p3's NE-lit aim shortened for close-range grass.
+        sierra_ichu: { cx: 40, cz: 660, look: [-20, 702] },
+        // dawn aim keeps the far chunk boundary OUT of the sky region — a
+        // higher aim catches the pre-existing LOD T-junction sun-bleed along
+        // a chunk edge (p3-documented, skirt fix deferred) as a bright line.
+        sierra_dawnlit: { cx: -120, cz: 700, look: [-90, 780] },
+        // jungle: understory ferns + dark broadleaf (short aim keeps the
+        // river-line fog wash out of the right half — measured)
+        jungle_fern: { cx: 60, cz: -560, look: [38, -580] },
+        jungle_dawnlit: { cx: 60, cz: -560, look: [140, -480], ch: 25, ly: 6 },
+        // paititi: encroaching green at the city's edge. p3's proven
+        // north-along-flank aim (the dome's pale stone + altitude fog
+        // whiteouts straight-across day aims — measured p3 and again in the
+        // first p4 probe); the west flank IS the city's edge, falloff region.
+        paititi_edge: { cx: 680, cz: -40, look: [740, 90] },
+        // valley: trees + riverbank boulders + mist over the river line
+        valley_mix: { cx: 70, cz: 60, look: [10, 128] },
+        // dawn (XFAIL row — measured 15.41% at ch 18): the channel floor sits
+        // in 950 m shadow reach at the 6° sun; no valley-floor aim passes.
+        // Documented, flagged to the light-rig owner.
+        valley_dawnlit: { cx: 260, cz: 40, look: [0, 60], ch: 18 },
+      };
+      const vant = vantages[v] || vantages.cf_floor;
+      const num = (k: string, d: number) => {
+        const s = urlParams.get(k);
+        return s === null ? d : parseFloat(s);
+      };
+      const VX = { cx: num('cx', vant.cx), cz: num('cz', vant.cz), lx: 0, lz: 0 };
+      VX.lx = num('lx', vant.look[0]);
+      VX.lz = num('lz', vant.look[1]);
+      const camDist = num('cd', 10), camH = num('ch', vant.ch ?? 2.6);
+      const [lx, lz] = [VX.lx, VX.lz];
+      const dx = lx - VX.cx, dz = lz - VX.cz;
+      const dl = Math.max(0.001, Math.hypot(dx, dz));
+      const ux = dx / dl, uz = dz / dl;
+      const camX = VX.cx - ux * camDist, camZ = VX.cz - uz * camDist;
+      // Character parks behind the camera (chunk loader follows her), out of
+      // frame; foliage instances fill the 8–25 m foreground anchor band (§1.1.1).
+      character.teleport(camX - ux * 10, camZ - uz * 10, 0);
+      character.disableCameraUpdate = true;
+      const camY = getGlobalTerrainHeight(camX, camZ) + camH;
+      camera.position.set(camX, camY, camZ);
+      camera.lookAt(lx, getGlobalTerrainHeight(lx, lz) + 2 + num('ly', vant.ly ?? 0), lz);
     } else if (shot === 'character_closeup') {
       character.teleport(50, 50, 0);
       character.disableCameraUpdate = true;
@@ -601,6 +676,19 @@ async function init() {
 
     // Sun/shadow rig follows the shot's viewpoint (§3.2)
     getActiveLightRig()?.update(camera.position, camera);
+
+    // V-FOLIAGE: decor was never updated in shot mode — every §8 capture so
+    // far rendered the instances as an origin pile (all identity matrices).
+    // Place foliage around the shot camera; ?t= drives the T5 wind clock so
+    // two captures at different t show the §8.3 motion-ready displacement.
+    decor.update(camera, tStr ? parseFloat(tStr) : 0);
+
+    // Shot-time chunk streaming (p4): the origin-centered chunk disc is
+    // circle-culled (corners beyond chunk radius 4 unload), leaving fog-void
+    // holes inside far vantage frames — p3's deferred "loader cull revisit",
+    // measured as white void slabs in the early p4 probes. Stream chunks
+    // around the SHOT camera so every vantage frames solid terrain.
+    terrainManager.update(camera.position);
 
     // POM self-shadow uniform (HIGH tier): the tangent-space light march
     // consumes the active sun direction in view space, updated from the rig.
@@ -707,6 +795,11 @@ async function init() {
 
 
   if (shotMode) {
+    // Re-apply the wind clock: the pre-render decor.update ran BEFORE the
+    // first render compiled the foliage shaders, so its uTime write hit a
+    // not-yet-existing uniform object (the t0/t2 A/B pair diffed to exactly
+    // zero — p4 gate audit caught it). Uniforms exist after render #1.
+    decor.update(camera, tStr ? parseFloat(tStr) : 0);
     // Render once and signal ready
     if (!skipPost) {
         if (isWebGPU && postProcessing) {
