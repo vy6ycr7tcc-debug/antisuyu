@@ -68,7 +68,7 @@ Deferred (flagged in PR): on-device iPhone pass (real Safari, real GPU — needs
 
 ## P5.4 Files touched
 
-`src/touch/controls.ts` (rewrite), `src/input.ts`, `src/character.ts`, `src/renderer.ts`, `src/main.ts`, `src/ui/touchui.ts` (new), `src/ui/title.ts`, `src/ui/menu.ts`, `src/ui/index.ts`, `src/ui/styles.css`, `index.html`, `scripts/p5_mobile_play.cjs` (new), `scripts/p5_world_regr.cjs` (new), `scripts/p5_gate_audit.py` (new), `scripts/p5_probe.cjs` (new, F13 diagnostic), `docs/verification/phase-5/*`.
+`src/touch/controls.ts` (rewrite), `src/input.ts`, `src/character.ts`, `src/renderer.ts`, `src/main.ts`, `src/ui/touchui.ts` (new), `src/ui/title.ts`, `src/ui/menu.ts`, `src/ui/index.ts`, `src/ui/styles.css`, `index.html`, `scripts/p5_mobile_play.cjs` (new), `scripts/p5_world_regr.cjs` (new), `scripts/p5m_gate_audit.py` (new; renamed from `p5_gate_audit.py` — that name is owned by V-WATER on main), `scripts/p5_probe.cjs` (new, F13 diagnostic), `docs/verification/phase-5/*`.
 
 ## P5.5 Results (final run)
 

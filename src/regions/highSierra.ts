@@ -498,6 +498,15 @@ export const highSierra: RegionModule = {
         
         const checkOutpostProximity = () => {
             if (!checkLoopActive) return;
+
+            // P-MOBILE: poll only while the sim runs — it reads the character
+            // position, which is frozen under the pause menu, so ticking it
+            // during pause could fire the confrontation flag one frame after
+            // pausing instead of at the same sim moment.
+            if (api.isSimPaused()) {
+                requestAnimationFrame(checkOutpostProximity);
+                return;
+            }
             
             if (!cameraRef) {
                 // Find the main camera
@@ -610,7 +619,12 @@ export const highSierra: RegionModule = {
         // every §8 capture. Ambient wildlife belongs to the scene, not to
         // the enter transition.
         const fly = () => {
-            condorT += 0.016;
+            // P-MOBILE: ambient animation freezes with the sim — condorT is a
+            // frame-count clock, so without this gate the condor kept orbiting
+            // behind the pause menu while everything else stood still.
+            if (!api.isSimPaused()) {
+                condorT += 0.016;
+            }
             const a = condorT * (Math.PI * 2 / 90); // 90 s orbit
             const cx = 100, cz = 850, r = 130;
             const h = api.terrainHeight(cx, cz) + 95;

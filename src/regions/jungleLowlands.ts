@@ -367,7 +367,15 @@ export const jungleLowlands: RegionModule = {
       loopActive = true;
       const loop = () => {
         if(!loopActive) return;
-        
+
+        // P-MOBILE: freeze the quest tick with the sim. vanguardTimer (and
+        // every flag below) used to keep advancing on wall-clock rAF while
+        // the pause menu was open — waves kept 'fighting' in a frozen world.
+        if (api.isSimPaused()) {
+          requestAnimationFrame(loop);
+          return;
+        }
+
         // Note: The character controller needs to be queried here in a real integration,
         // but since we only have `scene` we assume global `window.character` or simulate.
         // For the sake of the contract, we will simulate interaction based on time,

@@ -40,6 +40,12 @@ export interface RegionBuildAPI {
   terrainHeight(x: number, z: number): number; // wraps getGlobalTerrainHeight
   onEnterRegion(cb: () => void): void;
   onExitRegion(cb: () => void): void;
+  // P-MOBILE: true while the pause menu (or tab visibility) has halted the
+  // main sim loop. Region rAF tick chains MUST gate their state mutations on
+  // this — the main loop no longer runs under the menu, so any timer or
+  // quest flag advanced inside a region tick would otherwise keep counting
+  // real time while the world is frozen.
+  isSimPaused(): boolean;
 }
 
 export interface RegionModule {

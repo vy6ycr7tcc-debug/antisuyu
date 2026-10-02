@@ -131,24 +131,40 @@ const shot = async (page, filepath) => {
   });
   gate('G2_journey_start', g2.titleHidden && g2.hudVisible && g2.pauseVisible, g2);
 
-  // --------------------------------- G3 prep: walk out of the river channel
-  // The journey starts at (0,0) — the river crossing (state may be SWIM).
-  // Hold full +x deflection until WALK and x >= 25 (east bank, outside the
-  // |x|<22 river influence). SwiftShader frames are slow and dt is clamped
-  // to 0.1 s per rAF, so sim time runs behind wall time — budget is generous.
-  await touchStart([{ x: 80, y: 764 }]);
-  await sleep(80);
-  await touchMove([{ x: 130, y: 764 }]); // dx +50 = full deflection → +x
-  const stabT0 = Date.now();
+  // --------------------------------- G3 prep: reach measured dry land
+  // The journey starts at (0,0) in the river channel (state may be SWIM).
+  // The old "hold +x until WALK && x >= 25" walk-out coupled this gate to
+  // terrain topology: V-WATER's raised water table floods the east bank and
+  // the character swam at x=173.8 until the 45 s budget died. The suite now
+  // teleports (window.__testTeleport, &turbo=1-only hook) through a candidate
+  // list and self-selects the FIRST MEASURED-DRY spot (state WALK, drift
+  // < 1.5 m over 3 samples). The chosen spot is reported in the gate payload —
+  // the measurement basis is part of the evidence.
+  const DRY_CANDIDATES = [
+    [26, 34], [34, -30], [-28, 36], [60, 120], [150, 600], [0, -750],
+  ];
   let stable = false;
-  while (Date.now() - stabT0 < 45000) {
-    const s = await sample();
-    if (s.state === 'WALK' && s.x >= 25) { stable = true; break; }
-    await sleep(200);
+  let startPos = null;
+  let probeLog = [];
+  for (const [cx, cz] of DRY_CANDIDATES) {
+    await page.evaluate((p) => window.__testTeleport && window.__testTeleport(p[0], p[1], 0), [cx, cz]);
+    await sleep(1200); // settle: terrain snap + buoyancy evaluation
+    const s1 = await sample();
+    const s2 = await sample(); await sleep(300);
+    const s3 = await sample(); await sleep(300);
+    const drift = Math.max(
+      Math.hypot((s2.x ?? 1e9) - (s1.x ?? 1e9), (s2.z ?? 1e9) - (s1.z ?? 1e9)),
+      Math.hypot((s3.x ?? 1e9) - (s2.x ?? 1e9), (s3.z ?? 1e9) - (s2.z ?? 1e9))
+    );
+    const dry = s3.state === 'WALK' && drift < 1.5;
+    probeLog.push({ spot: [cx, cz], state: s3.state, drift: +drift.toFixed(2), dry });
+    console.log(`probe (${cx},${cz}) state=${s3.state} drift=${drift.toFixed(2)} dry=${dry}`);
+    if (dry) { startPos = s3; stable = true; break; }
   }
-  await touchEnd();
-  const startPos = await sample();
-  console.log(`stabilized=${stable} pos=(${startPos.x?.toFixed(1)},${startPos.z?.toFixed(1)}) state=${startPos.state}`);
+  if (startPos) {
+    startPos.state = 'WALK';
+  }
+  console.log(`stabilized=${stable} pos=(${startPos?.x?.toFixed(1)},${startPos?.z?.toFixed(1)}) state=${startPos?.state}`);
   await sleep(500);
 
   // ------------------------------------------------ G3: analog joystick move
@@ -194,7 +210,8 @@ const shot = async (page, filepath) => {
     await touchEnd();
   }
   gate('G3_analog_move', stable && full.maxDisp >= 3 && full.maxSpeed >= 4.5 && half.maxSpeed <= 2.3, {
-    stabilized: stable, fullDeflection: { maxDisplacement_m: +full.maxDisp.toFixed(2), maxSpeed: +full.maxSpeed.toFixed(2) },
+    stabilized: stable, probeLog,
+    fullDeflection: { maxDisplacement_m: +full.maxDisp.toFixed(2), maxSpeed: +full.maxSpeed.toFixed(2) },
     halfDeflection: { maxSpeed: +half.maxSpeed.toFixed(2) },
     stickDelivery: full.stickMag ?? null,
     criterion: 'disp >= 3 m, full-speed >= 4.5 (run band), half-speed <= 2.3 (walk band)',

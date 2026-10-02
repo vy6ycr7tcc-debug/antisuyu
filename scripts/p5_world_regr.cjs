@@ -1,10 +1,12 @@
 // P-MOBILE world regression capture: foliage_check cf_floor day at the
 // mobile viewport (390×844 @ dpr 3, touch). Controls work must not touch
 // world rendering — this must match Phase 4's cf_floor day PASS row.
-// Usage: node scripts/p5_world_regr.cjs
+// Usage: node scripts/p5_world_regr.cjs [BASE]  (default vite dev 5173)
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+
+const BASE = process.argv[2] || 'http://localhost:5173/juzu/';
 
 const OUT = path.join(__dirname, '..', 'docs', 'verification', 'phase-5');
 fs.mkdirSync(OUT, { recursive: true });
@@ -26,7 +28,7 @@ fs.mkdirSync(OUT, { recursive: true });
   page.on('console', m => logs.push(`${m.type()}: ${m.text()}`));
   page.on('pageerror', e => logs.push(`PAGEERROR: ${e.message}`));
 
-  const url = `http://localhost:5173/juzu/?shot=foliage_check&v=cf_floor&tod=day&t=2&readback=1`;
+  const url = `${BASE}?shot=foliage_check&v=cf_floor&tod=day&t=2&readback=1`;
   await page.goto(url, { timeout: 30000 });
   await page.waitForFunction(() => window.__shotReady === true, { timeout: 25000 });
   await page.waitForTimeout(700);

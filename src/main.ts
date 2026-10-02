@@ -6,8 +6,9 @@ import { createTerrain } from './terrain.js';
 import { createRiver } from './river.js';
 import { createDecor } from './decor.js';
 import { CharacterController } from './character.js';
-import { InputManager } from './input.js';
+import { InputManager, isTouchLikeDevice } from './input.js';
 import { TouchControls } from './touch/controls.js';
+import { TouchUI } from './ui/touchui.js';
 import { WebGPURenderer } from 'three/webgpu';
 import type { PostProcessing } from 'three/webgpu';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -193,19 +194,57 @@ async function init() {
     window.__reducedMotion = mediaQuery.matches;
   });
 
+  // P-MOBILE F10: screen wake lock (Safari 17+ / Chromium; feature-detected).
+  interface WakeLockSentinelLike {
+    release: () => Promise<void>;
+  }
+  let wakeLock: WakeLockSentinelLike | null = null;
+  let journeyStarted = false;
+  const requestWakeLock = async (): Promise<void> => {
+    try {
+      const nav = navigator as Navigator & {
+        wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> };
+      };
+      if (!nav.wakeLock) return;
+      wakeLock = await nav.wakeLock.request('screen');
+    } catch {
+      // Denied or unsupported — play proceeds without wake lock.
+    }
+  };
+  const releaseWakeLock = (): void => {
+    void wakeLock?.release().catch(() => { /* already released */ });
+    wakeLock = null;
+  };
+
+  // P-MOBILE F12: iOS suspends the AudioContext until a user gesture
+  // resumes it. First pointerdown keys the unlock; journey start re-keys it
+  // inside the New-Journey gesture chain. (three's AudioContext type is its
+  // own minimal wrapper — narrow to the DOM type once, no `any`.)
+  const getAudioCtx = (): globalThis.AudioContext =>
+    THREE.AudioContext.getContext() as unknown as globalThis.AudioContext;
+  const resumeAudioContext = (): void => {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+  };
+  window.addEventListener('pointerdown', resumeAudioContext, { once: true });
+
   // Visibility pause
   let isPaused = false;
   document.addEventListener('visibilitychange', () => {
     isPaused = document.hidden;
-    const ctx = THREE.AudioContext.getContext() as any;
+    const ctx = getAudioCtx();
     if (isPaused) {
       if (ctx.state === 'running') {
         ctx.suspend();
       }
+      releaseWakeLock();
     } else {
       if (ctx.state === 'suspended') {
         ctx.resume();
       }
+      if (journeyStarted) void requestWakeLock();
       lastFrameTime = performance.now();
     }
   });
@@ -304,8 +343,10 @@ async function init() {
 
   const input = new InputManager();
 
-  // touch controls block
-  const touchControls = new TouchControls(input);
+  // P-MOBILE: the touch layer mounts its UI only on touch-capable devices
+  // (or &touch=1 for desktop verification captures — plan §P5.3).
+  const touchMode = isTouchLikeDevice() || urlParams.get('touch') === '1';
+  const touchControls = new TouchControls(input, { active: touchMode });
 
   // p7 gate A/B suspension (&ncm=1): construct the character with the detail
   // maps disabled — the flat pre-p7 surface read for the wiring A/B pair
@@ -318,7 +359,40 @@ async function init() {
   registerServiceWorker();
   mountOfflineUI();
 
-  initUI(character);
+  const ui = initUI(character);
+
+  // P-MOBILE F2/F7: the touch MENU button toggles the pause menu, and
+  // pausing now actually pauses the sim (isPaused) and releases held touch
+  // input. Previously the menu was Escape-only — unreachable on iPhone —
+  // and even when open the loop kept running (stick input stayed live).
+  const touchUI = new TouchUI(ui.root, {
+    onPauseToggle: () => {
+      if (ui.menu.isOpen) {
+        ui.menu.close();
+      } else {
+        ui.menu.open();
+      }
+    }
+  });
+  touchUI.setVisible(false);
+
+  ui.menu.onPause = () => {
+    isPaused = true;
+    touchControls.releaseAll();
+    releaseWakeLock();
+  };
+  ui.menu.onResume = () => {
+    isPaused = false;
+    lastFrameTime = performance.now();
+    if (journeyStarted && !ui.title.isOpen) void requestWakeLock();
+  };
+
+  ui.onJourneyStart = () => {
+    journeyStarted = true;
+    touchUI.setVisible(touchMode);
+    resumeAudioContext();
+    void requestWakeLock();
+  };
 
   const flags = createQuestFlags();
   const saveAPI = createSaveSystem();
@@ -338,7 +412,11 @@ async function init() {
       terrainHeight: getGlobalTerrainHeight,
       onEnterRegion: (cb: () => void) => regionManager.registerEnterCallback(region.id, cb),
       onExitRegion: (cb: () => void) => regionManager.registerExitCallback(region.id, cb),
-      resolveEncounter: (id: string) => regionManager.resolveEncounter(id)
+      resolveEncounter: (id: string) => regionManager.resolveEncounter(id),
+      // P-MOBILE: region rAF tick chains must freeze with the sim (see
+      // RegionBuildAPI.isSimPaused) — pause now halts the main loop, so any
+      // region timer that kept counting would desync from the frozen world.
+      isSimPaused: () => isPaused
     };
     try {
       region.build(api);
@@ -1164,38 +1242,62 @@ async function init() {
       updateFrameStats();
     }
 
-    const dt = Math.min(clock.getDelta(), 0.1);
+    const rawDt = Math.min(clock.getDelta(), 0.1);
     const time = clock.getElapsedTime();
 
     if (cinematicPass) {
        cinematicPass.uniforms['time'].value = time;
     }
 
+    // P-MOBILE verification tooling (&turbo=1): headless SwiftShader renders
+    // at ~0.5 fps while dt is clamped to 0.1 s per rAF — the simulation then
+    // advances ~30× slower than wall time and time-based control gates
+    // starve. Turbo pumps fixed 1/60 s sub-steps — ~1 s of sim time per
+    // rendered frame — so gate-relevant time passes at a workable rate.
+    // Physics stays stable (fixed 1/60 step); rendering still happens once
+    // per rAF. Off by default; zero effect on normal play or §8 captures.
+    const turboSteps = urlParams.get('turbo') === '1' ? 60 : 1;
+
+    // P-MOBILE verification tooling (&turbo=1 only): deterministic spawn for
+    // the functional gate suite. Walking "out of the river" coupled G3 to
+    // terrain topology — V-WATER's raised water table turned the old walk-out
+    // into an endless SWIM. The suite now probes candidate spots with this
+    // hook and self-selects the first measured-dry one. Never reachable in
+    // normal play (no turbo param, no exposure).
+    if (urlParams.get('turbo') === '1' && !(window as any).__testTeleport) {
+      (window as any).__testTeleport = (x: number, z: number, theta = 0) => {
+        character.teleport(x, z, theta);
+      };
+    }
+
     if (!shotMode) {
-      touchControls.update(dt);
-      physics.update(dt);
-      character.update(dt);
-      terrainManager.update(character.mesh.position);
-      regionManager.update(character.mesh.position);
-      river.update(time);
-      decor.update(camera);
-      getActiveLightRig()?.update(character.mesh.position, camera);
+      for (let step = 0; step < turboSteps; step++) {
+        const dt = turboSteps > 1 ? 1 / 60 : rawDt;
+        touchControls.update(dt);
+        physics.update(dt);
+        character.update(dt);
+        terrainManager.update(character.mesh.position);
+        regionManager.update(character.mesh.position);
+        river.update(time);
+        decor.update(camera);
+        getActiveLightRig()?.update(character.mesh.position, camera);
 
-      // V-ATMOS: one gated atmosphere step (region id first — the old order
-      // updated particles before computing it, so the gate could not exist).
-      const activeRegionId = regionManager.currentRegionId;
-      updateAtmosphere(camera.position, time, activeRegionId, todParam);
+        // V-ATMOS: one gated atmosphere step (region id first — the old order
+        // updated particles before computing it, so the gate could not exist).
+        const activeRegionId = regionManager.currentRegionId;
+        updateAtmosphere(camera.position, time, activeRegionId, todParam);
 
-      // Check distance to rockslide trigger zone (approx x: 100, z: 0)
-      if (!hasTriggeredRockslide) {
-         const distSq = (character.mesh.position.x - 100)**2 + (character.mesh.position.z)**2;
-         if (distSq < 400) { // 20 units radius
-            hasTriggeredRockslide = true;
-            physics.spawnRockslide(scene, 150, 0, 200);
-            console.log("Rockslide triggered!");
-         }
+        // Check distance to rockslide trigger zone (approx x: 100, z: 0)
+        if (!hasTriggeredRockslide) {
+           const distSq = (character.mesh.position.x - 100)**2 + (character.mesh.position.z)**2;
+           if (distSq < 400) { // 20 units radius
+              hasTriggeredRockslide = true;
+              physics.spawnRockslide(scene, 150, 0, 200);
+              console.log("Rockslide triggered!");
+           }
+        }
+        updateUI(dt);
       }
-      updateUI(dt);
     }
 
     if (!skipPost) {
