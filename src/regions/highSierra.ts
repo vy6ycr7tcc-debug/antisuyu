@@ -7,8 +7,21 @@ import type {
     QuestStageDef, 
     RegionShotDef
 } from '../world/contracts.js';
-import { ashlarLight, granite, bronze, woodAged, caveDark, thatchIchu } from '../materials.js';
+import { ashlarLight, granite, bronze, woodAged, caveDark, thatchIchu, lichenPatch, terracotta, channelClear } from '../materials.js';
 import type { QuestFlagAPI } from '../save/questFlags.js';
+
+// J7: all placement is seeded (Mulberry32, same pattern as volumetrics.ts).
+// The pre-p10 file used Math.random() throughout — every page load re-rolled
+// cliff jitter, grass and crate scatter (p10 audit defect ①).
+const HS_SEED = 0x6501;
+function mulberry32(a: number) {
+    return function () {
+        let t = (a += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
 
 export const highSierra: RegionModule = {
     id: 'high_sierra',
@@ -99,6 +112,7 @@ export const highSierra: RegionModule = {
         { id: 'hs_overview', camera: { x: 0, y: 150, z: 600 }, lookAt: { x: 0, y: 0, z: 800 } }
     ],
     build(api: RegionBuildAPI): void {
+        const rng = mulberry32(HS_SEED);
         const _flags: QuestFlagAPI = api.flags;
         _flags;
         const group = new THREE.Group();
@@ -111,6 +125,34 @@ export const highSierra: RegionModule = {
         const bronzeMat = bronze();
         const darkCrateMat = woodAged();
         const darkCaveMat = caveDark();
+        const lichenMat = lichenPatch();
+        const clayMat = terracotta();
+
+        // §2.3 dressing vocabulary helpers (all seeded, J7)
+
+        // Cairn: stacked stone pile (§2.3 vocabulary)
+        const cairnGeo = [new THREE.DodecahedronGeometry(1.1), new THREE.DodecahedronGeometry(0.8), new THREE.DodecahedronGeometry(0.5)];
+        const cairn = (parent: THREE.Object3D, x: number, z: number, s = 1) => {
+            let y = 0;
+            for (const g of cairnGeo) {
+                const stone = new THREE.Mesh(g, carvedStoneMat);
+                stone.position.set(x + (rng() - 0.5) * 0.3, y + 0.5 * s, z + (rng() - 0.5) * 0.3);
+                stone.scale.setScalar(s);
+                stone.rotation.y = rng() * Math.PI;
+                parent.add(stone);
+                y += 0.62 * s;
+            }
+        };
+
+        // Lichen patch: flat decal slightly off the host face (§2.3, roughness 1.0)
+        const lichenGeo = new THREE.CircleGeometry(1, 10);
+        const lichen = (parent: THREE.Object3D, x: number, y: number, z: number, rx: number, ry: number, s: number) => {
+            const p = new THREE.Mesh(lichenGeo, lichenMat);
+            p.position.set(x, y, z);
+            p.rotation.set(rx, ry, rng() * Math.PI);
+            p.scale.setScalar(s);
+            parent.add(p);
+        };
 
         // 1. Qenko Solstice Marker (Position: x: 100, z: 600)
         const qenkoGroup = new THREE.Group();
@@ -122,6 +164,14 @@ export const highSierra: RegionModule = {
         const outcrop = new THREE.Mesh(outcropGeo, stoneMat);
         outcrop.position.y = -2.5; // sunk halfway
         qenkoGroup.add(outcrop);
+
+        // §2.3 lichen patches on the outcrop rim + a cairn line (vocabulary)
+        for (let i = 0; i < 7; i++) {
+            const a = rng() * Math.PI * 2;
+            lichen(qenkoGroup, Math.cos(a) * (13 + rng() * 3), 0.1 + rng() * 2.4, Math.sin(a) * (13 + rng() * 3), -Math.PI / 2 + (rng() - 0.5) * 0.5, 0, 0.8 + rng() * 1.6);
+        }
+        cairn(qenkoGroup, 12, 8, 0.9);
+        cairn(qenkoGroup, 14, 10.5, 0.7);
         
         // Gnomons (shadow-casting stones)
         const gnomonGeo = new THREE.BoxGeometry(1, 4, 1);
@@ -146,14 +196,19 @@ export const highSierra: RegionModule = {
         const cX = -150, cZ = 750;
         chakanaGroup.position.set(cX, api.terrainHeight(cX, cZ), cZ);
 
-        // Canyon Wall (Rock face)
+        // Canyon Wall (Rock face) — seeded jitter (J7)
         const wallGroup = new THREE.Group();
         const cliffGeo = new THREE.BoxGeometry(40, 50, 10);
-        for(let i=0; i<3; i++) {
+        for (let i = 0; i < 3; i++) {
             const cliff = new THREE.Mesh(cliffGeo, stoneMat);
-            cliff.position.set((i - 1) * 35, 20, -5 + Math.random() * 5);
-            cliff.rotation.y = (Math.random() - 0.5) * 0.2;
+            cliff.position.set((i - 1) * 35, 20, -5 + rng() * 5);
+            cliff.rotation.y = (rng() - 0.5) * 0.2;
             wallGroup.add(cliff);
+        }
+        // §2.3 lichen patches on the cliff faces
+        for (let i = 0; i < 8; i++) {
+            const side = i % 2 === 0 ? -1 : 1;
+            lichen(wallGroup, side * (12 + rng() * 24), 4 + rng() * 26, 0.6 + rng() * 0.8, 0, side * Math.PI / 2, 1.2 + rng() * 2.2);
         }
         chakanaGroup.add(wallGroup);
 
@@ -187,8 +242,9 @@ export const highSierra: RegionModule = {
 
         doorGroup.add(dial);
         
-        // Export refs for animation later
-        (chakanaGroup as any).userData = { doorMesh, dial };
+        // Export refs for animation later (typed userData — p10 audit defect ③:
+        // the `as any` casts violated the repo rule)
+        chakanaGroup.userData = { doorMesh, dial };
 
         chakanaGroup.add(doorGroup);
         group.add(chakanaGroup);
@@ -231,17 +287,11 @@ export const highSierra: RegionModule = {
         });
         
 
-        // Milestone 2: Hard-light response
-        // Add a local directional light to simulate high-altitude harsh light on enter
-        const hsLight = new THREE.DirectionalLight(0xffffff, 1.5);
-        hsLight.position.set(100, 200, 50);
-
-        api.onEnterRegion(() => {
-            api.scene.add(hsLight);
-        });
-        api.onExitRegion(() => {
-            api.scene.remove(hsLight);
-        });
+        // Milestone 2: Hard-light response — REMOVED (p10 audit defect ②).
+        // The region added its own DirectionalLight(1.5) on enter: the light rig
+        // (§7, V-LIGHT/p8) already grades the sierra sun — a second sun
+        // double-graded the region and invalidated every capture's light read.
+        // High-altitude hardness is owned by §3.3.2 (thin-air sun + exposure).
 
         // Milestone 2: Gold grass tones & rock/vegetation distribution
         const ichuMat = thatchIchu(); // Inherits the #9A8B4F / #6B6335 tones
@@ -250,23 +300,23 @@ export const highSierra: RegionModule = {
 
         const smallRockGeo = new THREE.DodecahedronGeometry(1.5);
 
-        // Scatter around Qenko
+        // Scatter around Qenko (seeded, J7)
         for(let i=0; i<15; i++) {
             const grass = new THREE.Mesh(grassGeo, ichuMat);
-            grass.position.set((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
+            grass.position.set((rng()-0.5)*20, 0, (rng()-0.5)*20);
             qenkoGroup.add(grass);
 
             if (i % 3 === 0) {
                 const rock = new THREE.Mesh(smallRockGeo, carvedStoneMat);
-                rock.position.set((Math.random()-0.5)*25, 0.5, (Math.random()-0.5)*25);
+                rock.position.set((rng()-0.5)*25, 0.5, (rng()-0.5)*25);
                 qenkoGroup.add(rock);
             }
         }
 
-        // Scatter around Chakana
+        // Scatter around Chakana (seeded, J7)
         for(let i=0; i<15; i++) {
             const grass = new THREE.Mesh(grassGeo, ichuMat);
-            grass.position.set((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
+            grass.position.set((rng()-0.5)*20, 0, (rng()-0.5)*20);
             chakanaGroup.add(grass);
         }
 
@@ -308,7 +358,35 @@ export const highSierra: RegionModule = {
         boulderGroup.add(boulder, terrace1, terrace2);
         sayhuiteGroup.add(boulderGroup);
 
-        (sayhuiteGroup as any).userData = { boulderGroup, sluices };
+        sayhuiteGroup.userData = { boulderGroup, sluices };
+
+        // §2.3 stone-lined water channel: runs from the map boulder to the
+        // plaza edge; the sluice puzzle "routes water" — the channel water
+        // strip is revealed on solve (visual feedback, deterministic).
+        const channelGroup = new THREE.Group();
+        const channelFloor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 16), stoneMat);
+        channelFloor.position.set(-4, 0.1, 14);
+        const channelWallL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 16), stoneMat);
+        channelWallL.position.set(-4.95, 0.35, 14);
+        const channelWallR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.7, 16), stoneMat);
+        channelWallR.position.set(-3.05, 0.35, 14);
+        const channelWater = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.06, 15.6), channelClear());
+        channelWater.position.set(-4, 0.42, 14);
+        channelWater.visible = false; // revealed when q_act2_sayhuite_solved
+        channelGroup.add(channelFloor, channelWallL, channelWallR, channelWater);
+        sayhuiteGroup.add(channelGroup);
+
+        // §2.3 terraced retaining walls along the plaza approach
+        for (let i = 0; i < 2; i++) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(18, 1.6, 1.2), stoneMat);
+            wall.position.set(-6 + i * 4, 0.4 + i * 1.5, 22 + i * 2.4);
+            wall.rotation.y = 0.18;
+            sayhuiteGroup.add(wall);
+            const grassCap = new THREE.Mesh(new THREE.BoxGeometry(17, 0.25, 1.1), ichuMat);
+            grassCap.position.set(-6 + i * 4, 1.3 + i * 1.5, 22 + i * 2.4);
+            grassCap.rotation.y = 0.18;
+            sayhuiteGroup.add(grassCap);
+        }
 
         group.add(sayhuiteGroup);
 
@@ -334,6 +412,9 @@ export const highSierra: RegionModule = {
                 if (sluiceStates[0] && sluiceStates[1] && sluiceStates[2]) {
                     sayhuiteSolved = true;
                     api.flags.set('q_act2_sayhuite_solved');
+
+                    // §2.3: routed water becomes visible in the stone channel
+                    channelWater.visible = true;
 
                     // Animate table section sinking
                     const sink = () => {
@@ -381,13 +462,22 @@ export const highSierra: RegionModule = {
         }
         outpostGroup.add(plat);
 
-        // Supply crates (Sol Negro)
+        // Supply crates (Sol Negro) — seeded scatter (J7)
         const crateGeo = new THREE.BoxGeometry(2, 2, 2);
         for (let i = 0; i < 5; i++) {
             const crate = new THREE.Mesh(crateGeo, darkCrateMat);
-            crate.position.set(5 + Math.random() * 5, 1, -5 + Math.random() * 5);
-            crate.rotation.y = Math.random() * Math.PI;
+            crate.position.set(5 + rng() * 5, 1, -5 + rng() * 5);
+            crate.rotation.y = rng() * Math.PI;
             outpostGroup.add(crate);
+        }
+
+        // §2.3 pottery shards (terracotta, vocabulary) by the crates
+        const shardGeo = new THREE.CylinderGeometry(0.6, 0.45, 0.12, 10);
+        for (let i = 0; i < 4; i++) {
+            const shard = new THREE.Mesh(shardGeo, clayMat);
+            shard.position.set(3 + rng() * 8, 0.1, -7 + rng() * 6);
+            shard.rotation.set((rng() - 0.5) * 0.4, rng() * Math.PI, (rng() - 0.5) * 0.4);
+            outpostGroup.add(shard);
         }
         
         // Command crate (Target for confrontation)
@@ -426,9 +516,11 @@ export const highSierra: RegionModule = {
                 // Enter perimeter triggers standoff (radius ~30)
                 if (distSq < 900 && !outpostStandoffTriggered) {
                     outpostStandoffTriggered = true;
-                    // Spawn 2-3 mercenary lantern patrols (red lights)
+                    // Spawn 3 mercenary lantern patrols — warm lantern tone
+                    // (p10 audit defect ④: pure red 0xff0000 read arcade; the
+                    // Sol Negro palette §2.2 is muted, torches are warm)
                     for (let i = 0; i < 3; i++) {
-                        const light = new THREE.PointLight(0xff0000, 2, 20);
+                        const light = new THREE.PointLight(0xffaa00, 2, 20);
                         const angle = (i / 3) * Math.PI * 2;
                         light.position.set(oX + Math.cos(angle) * 15, api.terrainHeight(oX, oZ) + 2, oZ + Math.sin(angle) * 15);
                         api.scene.add(light);
@@ -440,8 +532,8 @@ export const highSierra: RegionModule = {
                 if (distSq < 25 && outpostStandoffTriggered) {
                     outpostConfrontationResolved = true;
                     api.flags.set('q_act2_outpost_confrontation');
-                    // Lights could turn off or change color to indicate resolution
-                    patrolLights.forEach(l => l.color.setHex(0x00ff00));
+                    // Resolution signal: lanterns dim to embers (was arcade green)
+                    patrolLights.forEach(l => l.intensity = 0.35);
                 }
             }
 
@@ -478,7 +570,59 @@ export const highSierra: RegionModule = {
         // The void is rendered to look deep and dark
         
         paqarinaGroup.add(mouth, caveVoid);
+
+        // §2.3: lichen around the cave mouth + flanking cairns (vocabulary)
+        for (let i = 0; i < 6; i++) {
+            const side = i % 2 === 0 ? -1 : 1;
+            lichen(paqarinaGroup, side * (14 + rng() * 6), 2 + rng() * 8, 10.6, 0, side * 0.4, 1.0 + rng() * 1.8);
+        }
+        cairn(paqarinaGroup, -12, 12, 1.0);
+        cairn(paqarinaGroup, 12, 12, 1.0);
+
         group.add(paqarinaGroup);
+
+        // §2.3 condor silhouette — distant, animated (vocabulary). A dark
+        // gliding bird on a slow circular path high above the plaza; wing flap
+        // + banking are deterministic functions of accumulated fixed-dt time
+        // (same fixed-dt discipline as the vanguard timer loop).
+        const condorGroup = new THREE.Group();
+        const wingMat = new THREE.MeshBasicMaterial({ color: 0x23211E }); // silhouette read
+        const wingGeo = new THREE.PlaneGeometry(4.2, 1.4);
+        wingGeo.rotateX(-Math.PI / 2); // lie flat in XZ — surface visible from below
+        const wingL = new THREE.Mesh(wingGeo, wingMat);
+        wingL.position.x = -2.0;
+        wingL.rotation.z = 0.12; // slight dihedral
+        const wingR = new THREE.Mesh(wingGeo, wingMat);
+        wingR.position.x = 2.0;
+        wingR.rotation.z = -0.12;
+        const condorBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 1.6, 4, 8), wingMat);
+        condorBody.rotation.x = Math.PI / 2;
+        const condor = new THREE.Group();
+        condor.add(wingL, wingR, condorBody);
+        condorGroup.add(condor);
+        group.add(condorGroup);
+
+        let condorT = 0;
+        // Always-on ambient animation (NOT enter-gated): region enter/exit
+        // callbacks never fire in shot mode (regionManager tracks the
+        // CHARACTER, hidden at spawn in shot captures — same mechanism p4
+        // found for decor.update), so an enter-gated condor is invisible in
+        // every §8 capture. Ambient wildlife belongs to the scene, not to
+        // the enter transition.
+        const fly = () => {
+            condorT += 0.016;
+            const a = condorT * (Math.PI * 2 / 90); // 90 s orbit
+            const cx = 100, cz = 850, r = 130;
+            const h = api.terrainHeight(cx, cz) + 95;
+            condor.position.set(cx + Math.cos(a) * r, h + Math.sin(a * 3) * 3, cz + Math.sin(a) * r);
+            condor.rotation.y = -a;                         // face along the orbit
+            condor.rotation.z = 0.28;                        // constant bank
+            const flap = Math.sin(condorT * 2.4) * 0.3;
+            wingL.rotation.z = 0.12 + flap;
+            wingR.rotation.z = -0.12 - flap;
+            requestAnimationFrame(fly);
+        };
+        fly();
         
     }
 };
