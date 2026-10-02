@@ -1,0 +1,24 @@
+== §8.3 clip/crush gates — jungle lowlands (§2.4 dressing pass) ==
+jl_overview_day            clip= 0.000%  crush=  0.00%  meanL=  92.6  PASS  
+jl_overview_dawn           clip= 0.000%  crush=  0.00%  meanL=  49.1  PASS  
+jl_serpents_path_day       clip= 0.000%  crush=  0.00%  meanL= 166.0  PASS  
+jl_trembling_day           clip= 0.000%  crush=  0.00%  meanL= 215.1  PASS  
+jl_vanguard_dawn           clip= 0.000%  crush=  0.83%  meanL= 107.5  PASS  
+jl_overview_390            clip= 0.000%  crush=  0.00%  meanL=  93.4  PASS  
+== §8.3 clip/crush gates — Paititi (§2.5 dressing pass) ==
+pa_overview_day            clip= 0.028%  crush=  0.00%  meanL= 152.3  PASS  
+pa_overview_dawn           clip= 0.000%  crush=  0.17%  meanL=  81.3  PASS  
+pa_plaza_day               clip= 0.000%  crush=  0.00%  meanL= 173.7  PASS  (dais + colonnade added; heights re-anchored)
+pa_terraces_day            clip= 0.000%  crush=  0.00%  meanL= 182.9  PASS  
+pa_sanctuary_day           clip= 0.000%  crush=  0.00%  meanL= 153.9  PASS  (shot re-anchored — was underground)
+pa_aqueduct_day            clip= 0.000%  crush=  0.00%  meanL= 115.2  PASS  
+pa_overview_390            clip= 0.071%  crush=  0.00%  meanL= 148.8  PASS  
+== pre/post pairs (base vs p11) ==
+pa_plaza pre->post         diff>8: 82.766%  mean|d|=56.53  PASS  (pre = underground fog frame, defect F6 (underground shot table); post = re-anchored + dressing)
+jl_serpents pre->post      diff>8:  0.499%  mean|d|= 0.29  PASS  (roots + lianas + foam edges)
+pa_overview pre->post      diff>8: 90.603%  mean|d|=76.75  PASS  (pre = underground fog frame; post = the city from the ridge)
+== J7 determinism pairs (same URL, separate page loads) ==
+jl_overview det A/B        diff>8:  0.000%  mean|d|= 0.00  PASS  (seeded placement + seeded rockfall)
+pa_overview det A/B        diff>8:  0.000%  mean|d|= 0.00  PASS  (paititi was already deterministic pre-p11)
+
+ALL PASS

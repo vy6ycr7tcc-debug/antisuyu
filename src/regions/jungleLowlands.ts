@@ -4,6 +4,20 @@ import { createWaterSurface } from '../river.js';
 import type { RegionModule, RegionBuildAPI, POIDef, EncounterDef, QuestStageDef, RegionShotDef } from '../world/contracts.js';
 import type { QuestFlagAPI } from '../save/questFlags.js';
 
+// J7: all placement is seeded (Mulberry32, same pattern as volumetrics.ts).
+// The pre-p11 file used Math.random() in the build AND inside the encounter
+// loop (rockfall trigger + landing spots) — every load re-rolled the region
+// (p11 audit, same defect family as p10's ①).
+const JL_SEED = 0x2a01;
+function mulberry32(a: number) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export const jungleLowlands: RegionModule = {
   id: 'jungle_lowlands',
   displayName: 'The Jungle Lowlands',
@@ -80,6 +94,7 @@ export const jungleLowlands: RegionModule = {
     { id: 'jl_overview', camera: { x: 50, y: 100, z: -1000 }, lookAt: { x: 0, y: 0, z: -1000 } }
   ],
   build(api: RegionBuildAPI): void {
+    const rng = mulberry32(JL_SEED);
     const group = new THREE.Group();
     group.name = 'Region_JungleLowlands';
     api.scene.add(group);
@@ -110,13 +125,46 @@ export const jungleLowlands: RegionModule = {
     serpentsPathGroup.position.set(spX, 0, spZ);
     serpentsPathGroup.position.y = api.terrainHeight(spX, spZ);
 
+    // §2.4 dressing vocabulary helpers (all seeded, J7)
+
+    // Buttress root: angled flattened box bracing a structure base
+    const rootGeo = new THREE.BoxGeometry(0.5, 0.3, 4);
+    rootGeo.translate(0, 0.15, 2); // pivot at the wall end
+    const buttressRoot = (parent: THREE.Object3D, x: number, y: number, z: number, ry: number, s: number) => {
+      const root = new THREE.Mesh(rootGeo, woodMat);
+      root.position.set(x, y, z);
+      root.rotation.y = ry;
+      root.rotation.x = 0.18; // leans into the ground
+      root.scale.setScalar(s);
+      parent.add(root);
+    };
+
+    // Liana strand: thin hanging cylinder (§2.4 liana vocabulary)
+    const lianaGeo = new THREE.CylinderGeometry(0.05, 0.035, 5, 5);
+    lianaGeo.translate(0, -2.5, 0); // hang from the anchor
+    const liana = (parent: THREE.Object3D, x: number, y: number, z: number, s: number) => {
+      const strand = new THREE.Mesh(lianaGeo, woodMat);
+      strand.position.set(x, y, z);
+      strand.scale.set(1, s, 1);
+      strand.rotation.z = (rng() - 0.5) * 0.35;
+      strand.rotation.x = (rng() - 0.5) * 0.35;
+      parent.add(strand);
+    };
+
     // Rock arches/overhangs
     const archGeo = new THREE.TorusGeometry(15, 4, 16, 32, Math.PI);
     for (let i = 0; i < 3; i++) {
       const arch = new THREE.Mesh(archGeo, rockMat);
       arch.position.set(0, -2, -i * 20);
-      arch.rotation.y = (Math.random() - 0.5) * 0.2;
+      arch.rotation.y = (rng() - 0.5) * 0.2;
       serpentsPathGroup.add(arch);
+      // §2.4: buttress roots brace each arch foot, lianas hang from the crown
+      const footA = Math.PI / 2, footB = Math.PI / 2 + 0.35;
+      buttressRoot(serpentsPathGroup, Math.cos(footA) * 13, 1.2, -i * 20 + Math.sin(footA) * 13, Math.atan2(Math.sin(footA), Math.cos(footA)) + Math.PI / 2, 1 + rng() * 0.5);
+      buttressRoot(serpentsPathGroup, -13, 1.2, -i * 20 + (rng() - 0.5) * 3, Math.PI + (rng() - 0.5) * 0.4, 1 + rng() * 0.5);
+      for (let l = 0; l < 3; l++) {
+        liana(serpentsPathGroup, (rng() - 0.5) * 16, 9 + rng() * 2, -i * 20 + (rng() - 0.5) * 12, 0.7 + rng() * 0.9);
+      }
     }
     
     // Amaru carvings (simplified as decorative blocks on arches)
@@ -126,10 +174,11 @@ export const jungleLowlands: RegionModule = {
     carving.rotation.z = -Math.PI / 4;
     serpentsPathGroup.add(carving);
 
-    // Flooded section water plane
+    // Flooded section water plane (§2.4 black-water pools WITH foam edges —
+    // the pre-p11 config had foamAtEdges: false, contradicting the palette row)
     const spWaterSurface = createWaterSurface(
       api.scene,
-      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: false },
+      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: true },
       40,
       60,
       caps
@@ -138,14 +187,14 @@ export const jungleLowlands: RegionModule = {
     spWater.position.set(0, 0, -20); 
     serpentsPathGroup.add(spWater);
 
-    // Bioluminescent flora
+    // Bioluminescent flora (§2.4-compliant: #7FB069, intensity 0.35, no light)
     const fungusGeo = new THREE.SphereGeometry(0.5, 8, 8);
     for (let i = 0; i < 10; i++) {
       const fungus = new THREE.Mesh(fungusGeo, emissiveFungusMat);
       fungus.position.set(
-        (Math.random() - 0.5) * 30,
-        Math.random() * 5,
-        -Math.random() * 40
+        (rng() - 0.5) * 30,
+        rng() * 5,
+        -rng() * 40
       );
       serpentsPathGroup.add(fungus);
     }
@@ -168,25 +217,33 @@ export const jungleLowlands: RegionModule = {
     rightWall.position.set(15, 5, 0);
     tremblingTunnelsGroup.add(leftWall, rightWall);
 
-    // Fallen debris
+    // Fallen debris (seeded, J7)
     const debrisGeo = new THREE.DodecahedronGeometry(2);
     for (let i = 0; i < 15; i++) {
       const debris = new THREE.Mesh(debrisGeo, rockMat);
       debris.position.set(
-        (Math.random() - 0.5) * 20,
+        (rng() - 0.5) * 20,
         1,
-        (Math.random() - 0.5) * 50
+        (rng() - 0.5) * 50
       );
       tremblingTunnelsGroup.add(debris);
     }
 
-    // Safe ground spirals (decals slightly above floor)
+    // §2.4 half-buried carved blocks (spiral accent #C9A86A vocabulary)
+    for (let i = 0; i < 5; i++) {
+      const buried = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.6), emissiveSpiralMat);
+      buried.position.set((rng() - 0.5) * 22, 0.2, (rng() - 0.5) * 44);
+      buried.rotation.set((rng() - 0.5) * 0.4, rng() * Math.PI, (rng() - 0.5) * 0.3);
+      tremblingTunnelsGroup.add(buried);
+    }
+
+    // Safe ground spirals (decals slightly above floor; seeded, J7)
     const spiralGeo = new THREE.CircleGeometry(1.5, 16);
     for (let i = 0; i < 5; i++) {
       const spiral = new THREE.Mesh(spiralGeo, emissiveSpiralMat);
       spiral.rotation.x = -Math.PI / 2;
       spiral.position.set(
-        (Math.random() - 0.5) * 10,
+        (rng() - 0.5) * 10,
         0.1, // slightly above ground
         -20 + i * 10
       );
@@ -247,10 +304,10 @@ export const jungleLowlands: RegionModule = {
     throat.rotation.y = Math.PI;
     submergedGroup.add(throat);
 
-    // Dark water plane
+    // Dark water plane (§2.4 foam edges)
     const dWaterSurface = createWaterSurface(
       api.scene,
-      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: false },
+      { color: 0x14261E, roughness: 0.1, opacity: 1.0, flowSpeed: 0, flowDir: [0, 1], foamAtEdges: true },
       30,
       40,
       caps
@@ -344,12 +401,13 @@ export const jungleLowlands: RegionModule = {
 
         // 2. jl_trembling_crossing
         if (!tremblingCrossed) {
-             // Simulate player triggering a rockfall occasionally
-             if (!rockfallActive && Math.random() < 0.01) {
+             // Simulate player triggering a rockfall occasionally — seeded
+             // rng (J7): same frame-count sequence reproduces the same roll
+             if (!rockfallActive && rng() < 0.01) {
                  rockfallActive = true;
                  rockfallTimer = 1.0;
                  fallingRocks.forEach((rock) => {
-                     rock.position.set((Math.random() - 0.5) * 10, 15, -10 - Math.random() * 20);
+                     rock.position.set((rng() - 0.5) * 10, 15, -10 - rng() * 20);
                      rock.visible = true;
                  });
              }
