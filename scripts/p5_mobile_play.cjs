@@ -272,14 +272,17 @@ const shot = async (page, filepath) => {
   }
   const tierLast = tierSeries[tierSeries.length - 1];
   const fpsMean = fpsSeries.filter(f => typeof f === 'number').reduce((a, b) => a + b, 0) / Math.max(1, fpsSeries.filter(f => typeof f === 'number').length);
-  // G7 gates the F9 fix (touch device must START at MEDIUM). The governor's
-  // response is recorded as evidence only: at ~1 fps headless the designed
-  // degradation (MEDIUM→LOW after 75 slow frames) is CORRECT behavior — a
-  // real iPhone at 30 fps never approaches that threshold.
-  gate('G7_tier_governor', tier0 === 'MEDIUM', {
+  // G7 gates the F9 fix as amended by P-MOBILE-Q (touch device must START at
+  // HIGH — the original MEDIUM start was calibrated on headless SwiftShader,
+  // not real iPhone GPUs; MEDIUM now holds 2.0 DPR so governor downshifts
+  // soften shadows only, never sharpness). The governor's response is recorded
+  // as evidence only: at ~1 fps headless the designed degradation
+  // (HIGH→MEDIUM→LOW after 75 slow frames) is CORRECT behavior — a real
+  // iPhone at 60 fps never approaches that threshold.
+  gate('G7_tier_governor', tier0 === 'HIGH', {
     tierStart: tier0, tierEnd: tierLast, tierSeries: [...new Set(tierSeries)],
     headlessFpsMean: +fpsMean.toFixed(1),
-    criterion: 'touch device starts at MEDIUM (F9); governor series recorded as evidence — SwiftShader fps is not an on-device claim',
+    criterion: 'touch device starts at HIGH (F9 as amended by P-MOBILE-Q); governor series recorded as evidence — SwiftShader fps is not an on-device claim',
   });
 
   // ------------------------------------------------ G8: safe-area hit targets

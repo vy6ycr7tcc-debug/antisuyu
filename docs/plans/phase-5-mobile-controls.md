@@ -39,7 +39,7 @@ Non-goals (owned elsewhere): jump/action verbs (no jump exists in the traversal 
 
 **iOS Safari hardening:**
 - `touch=1` URL param forces touch UI on desktop for verification captures (AGENTS.md §verification rule) — zero effect without the param.
-- Renderer: `matchMedia('(pointer: coarse)')` → default MEDIUM (F9) unless `?quality=` locked; adaptive governor still free to move both ways.
+- Renderer: `matchMedia('(pointer: coarse)')` → default HIGH (F9 **as amended by P-MOBILE-Q**: the MEDIUM start was calibrated on headless SwiftShader, not real iPhone GPUs; MEDIUM now holds 2.0 DPR so governor downshifts soften shadows only, never sharpness) unless `?quality=` locked; adaptive governor still free to move both ways.
 - Wake lock request on play start, re-acquire on visible, release on hidden/menu (F10).
 - index.html: apple-mobile-web-app-capable / status-bar-style black-translucent / apple-mobile-web-app-title (F11); `-webkit-tap-highlight-color: transparent`, `-webkit-touch-callout: none` (styles.css).
 - HUD safe-area: `#hud-overlay` padding switches to per-edge `calc()` with insets (F8); joystick/pause use the same insets.
@@ -59,7 +59,7 @@ Functional gates — `scripts/p5_mobile_play.cjs`, one JSON verdict per gate:
 | G4 camera-drag | Right-half 200 px drag → `__playerDebug.theta` changes ≥ 0.3 rad **with the stick idle**; `__touchDebug.right` claims the pointer (delivery proof). **Blocks F5; found F13.** |
 | G5 pause-touch | Tap pause button → menu visible; tap Resume → closed, joystick state clean. |
 | G6 render health | Zero console/page errors across the session (pre-existing dev-only `sw.js` MIME artifact exempt — its text mentions no file path, hence a MIME clause), `ktx2=true`, `__rendererType=webgl2`. |
-| G7 tier-governor | Gates the **F9 fix**: touch device starts at MEDIUM. The governor's series is recorded as evidence only — at ~1 fps headless the designed MEDIUM→LOW degradation is correct behavior; a real iPhone at 30 fps never approaches the 75-slow-frames threshold. **Blocks F9 regression.** |
+| G7 tier-governor | Gates the **F9 fix as amended by P-MOBILE-Q**: touch device starts at HIGH. The governor's series is recorded as evidence only — at ~1 fps headless the designed HIGH→MEDIUM→LOW degradation is correct behavior; a real iPhone at 60 fps never approaches the 75-slow-frames threshold. **Blocks F9/P-MOBILE-Q regression.** |
 | G8 safe-area / hit-targets | Pause button and joystick geometry via `getBoundingClientRect`: hit targets ≥ 44 px, joystick inset ≥ 24 px from edges, joystick visible. |
 
 Visual evidence (review, not numeric gates): `docs/verification/phase-5/` — title-touch capture, gameplay capture with engaged joystick visuals, pause-open capture, plus a 390-width `?shot=foliage_check&v=cf_floor&tod=day` world regression captured on this branch (must match Phase 4's PASS rows — controls work must not touch world rendering).
