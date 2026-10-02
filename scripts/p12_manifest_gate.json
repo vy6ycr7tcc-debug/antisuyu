@@ -1,0 +1,22 @@
+[
+  { "name": "jl_overview_day",        "url": "shot=region:jl_overview" },
+  { "name": "jl_overview_dawn",       "url": "shot=region:jl_overview&tod=dawn" },
+  { "name": "jl_serpents_path_day",   "url": "shot=region:jl_serpents_path" },
+  { "name": "jl_trembling_day",       "url": "shot=region:jl_trembling_tunnels" },
+  { "name": "jl_vanguard_dawn",       "url": "shot=region:jl_vanguard_choke&tod=dawn" },
+  { "name": "jl_overview_390",        "url": "shot=region:jl_overview", "w": 390, "h": 844 },
+  { "name": "pa_overview_day",        "url": "shot=region:pa_overview" },
+  { "name": "pa_overview_dawn",       "url": "shot=region:pa_overview&tod=dawn" },
+  { "name": "pa_plaza_day",           "url": "shot=region:pa_plaza_of_sun" },
+  { "name": "pa_terraces_day",        "url": "shot=region:pa_outer_terraces" },
+  { "name": "pa_sanctuary_day",       "url": "shot=region:pa_sanctuary" },
+  { "name": "pa_aqueduct_day",        "url": "shot=region:pa_aqueduct_line" },
+  { "name": "pa_overview_390",        "url": "shot=region:pa_overview", "w": 390, "h": 844 },
+  { "name": "cc_day",                 "url": "shot=character_closeup" },
+  { "name": "cc_dusk",                "url": "shot=character_closeup&tod=dusk" },
+  { "name": "mc_day",                 "url": "shot=material_check" },
+  { "name": "mc_dawn",                "url": "shot=material_check&lt=3.0&tod=dawn" },
+  { "name": "vo_day",                 "url": "shot=valley_overview" },
+  { "name": "jl_det_repeat",          "url": "shot=region:jl_overview" },
+  { "name": "cc_det_repeat",          "url": "shot=character_closeup" }
+]

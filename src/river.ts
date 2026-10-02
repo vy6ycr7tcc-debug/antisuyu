@@ -77,6 +77,21 @@ export function waterDepthAt(x: number, z: number): number {
   return Math.max(0, wc - bed);
 }
 
+// Phase 12 (p5 flag): world-space flow direction for physics consumers.
+// WATER_PRESETS.river flowDir [0, 1] is UV-space (+v). The surface plane is a
+// PlaneGeometry(width, length) rotated by -π/2 about X, which maps the +v axis
+// to world −Z — the same direction the legacy bot-era buoyancy block pushed.
+export const WATER_FLOW = { x: 0, z: -1 } as const;
+
+// Phase 12 (p5 flag): water SURFACE height at a world position under the same
+// channel solve as waterDepthAt. Returns null where the channel is dry so
+// physics consumers can skip buoyancy on land. (Surface = bed + column.)
+export function waterSurfaceY(x: number, z: number): number | null {
+  const depth = waterDepthAt(x, z);
+  if (depth <= 0) return null;
+  return getGlobalTerrainHeight(x, z) + depth;
+}
+
 // Build the conforming water geometry for one surface. Vertices carry three
 // custom attributes consumed identically by both shader paths:
 //   aDepth  — water column above the bed at this vertex (m; 0 on dry land)

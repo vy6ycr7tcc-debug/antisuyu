@@ -1,0 +1,131 @@
+{
+  "timestamp": "2026-10-02T04:17:15.840Z",
+  "url": "http://localhost:5173/juzu/?touch=1&turbo=1",
+  "viewport": "390x844@1x touch (iPhone 14 geometry), WebGL2 SwiftShader headless",
+  "gates": [
+    {
+      "name": "G1_title_touch",
+      "pass": true,
+      "detail": {
+        "revealedWithinFrames": 1,
+        "wallMs": 29420,
+        "criterion": "menu list reveals within 8 rendered frames of the tap (frame-synced; wall clock inflated only by SwiftShader)"
+      }
+    },
+    {
+      "name": "G2_journey_start",
+      "pass": true,
+      "detail": {
+        "titleHidden": true,
+        "hudVisible": true,
+        "pauseVisible": true
+      }
+    },
+    {
+      "name": "G3_analog_move",
+      "pass": true,
+      "detail": {
+        "stabilized": true,
+        "fullDeflection": {
+          "maxDisplacement_m": 3.77,
+          "maxSpeed": 5
+        },
+        "halfDeflection": {
+          "maxSpeed": 2.19
+        },
+        "stickDelivery": 1,
+        "criterion": "disp >= 3 m, full-speed >= 4.5 (run band), half-speed <= 2.3 (walk band)"
+      }
+    },
+    {
+      "name": "G4_camera_drag",
+      "pass": true,
+      "detail": {
+        "theta0": 0,
+        "theta1": 2,
+        "dTheta": 2,
+        "rightPointerClaimed": 7,
+        "accumulatedCamX": -40,
+        "criterion": "|dTheta| >= 0.3 rad with stick idle (200 px drag)"
+      }
+    },
+    {
+      "name": "G5_pause_touch",
+      "pass": true,
+      "detail": {
+        "opened": true,
+        "closed": true,
+        "joystickReleased": true
+      }
+    },
+    {
+      "name": "G7_tier_governor",
+      "pass": true,
+      "detail": {
+        "tierStart": "MEDIUM",
+        "tierEnd": "LOW",
+        "tierSeries": [
+          "MEDIUM",
+          "LOW"
+        ],
+        "headlessFpsMean": 1.4,
+        "criterion": "touch device starts at MEDIUM (F9); governor series recorded as evidence — SwiftShader fps is not an on-device claim"
+      }
+    },
+    {
+      "name": "G8_safearea_hittargets",
+      "pass": true,
+      "detail": {
+        "pause": {
+          "w": 76.8,
+          "h": 44,
+          "top": 16,
+          "right": 16
+        },
+        "joy": {
+          "w": 116,
+          "h": 116,
+          "left": 26,
+          "bottom": 26,
+          "visible": true
+        },
+        "criterion": "pause >= 44x44, joystick inset >= 24px left/bottom, visible"
+      }
+    },
+    {
+      "name": "G6_render_health",
+      "pass": true,
+      "detail": {
+        "errors": [],
+        "ktx2": true,
+        "renderer": "webgl2",
+        "exemption": "pre-existing dev-only sw.js MIME artifact (documented Phase 2) — production build serves the real worker"
+      }
+    },
+    {
+      "name": "EXTRA_visibility_release",
+      "pass": true,
+      "detail": {
+        "resting": true,
+        "titleWasPaused": true
+      }
+    }
+  ],
+  "fpsSeries": [
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    1.5,
+    1.5
+  ]
+}

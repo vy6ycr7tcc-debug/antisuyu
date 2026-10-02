@@ -116,7 +116,14 @@
   inset: 0;
   pointer-events: none;
   transition: opacity 0.5s ease;
-  padding: 2rem;
+  /* P-MOBILE F8: honor the notch/home indicator — plain 2rem padding let
+     the objective tracker and status bars run under the iPhone safe areas
+     in viewport-fit=cover. */
+  padding:
+    calc(2rem + env(safe-area-inset-top))
+    calc(2rem + env(safe-area-inset-right))
+    calc(2rem + env(safe-area-inset-bottom))
+    calc(2rem + env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -216,6 +223,17 @@
   pointer-events: none;
 }
 
+/* P-MOBILE G4 finding (measured): opacity:0 alone left these overlays'
+   CHILDREN hit-testable — the global `#ui-root button` / `input[type=range]`
+   { pointer-events: auto } rules re-enable them — so an invisible
+   pause-menu volume slider sat at mid-right screen and swallowed every
+   camera-look drag on the right half. visibility:hidden removes the whole
+   subtree from hit testing regardless of child pointer-events. */
+#title-screen.hidden,
+#pause-menu.hidden {
+  visibility: hidden;
+}
+
 #pause-menu.visible {
   opacity: 1;
   pointer-events: auto;
@@ -249,4 +267,71 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+/* -------------------------------------------------------------- P-MOBILE */
+/* Touch gamepad layer (joystick base + knob + hold ring). Lives under the
+   UI root (z 1000) so menus/pause stay on top; pointer-events none — the
+   TouchControls reads raw pointers, these elements are pure feedback. */
+#touch-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 900;
+}
+
+#touch-joystick-base {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.04) 70%);
+  transform: translate(-50%, -50%);
+  display: none;
+}
+
+/* Resting dock: bottom-left, inside the safe area (G8 measures this).
+   84 px center ⇒ 26 px visible inset after the 2 px ring border — the G8
+   gate requires ≥ 24 px of thumb clearance from the screen edge. */
+#touch-joystick-base.resting {
+  left: calc(84px + env(safe-area-inset-left));
+  top: calc(100% - 84px - env(safe-area-inset-bottom));
+}
+
+#touch-joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+}
+
+/* P-MOBILE F2: touch pause entry point. 44 px minimum hit target (HIG).
+   Specificity beats the bare `#ui-root button` rule above. */
+#ui-root .touch-pause-btn {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top));
+  right: calc(1rem + env(safe-area-inset-right));
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 22px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+#ui-root .touch-pause-btn:hover {
+  transform: none;
+  color: var(--color-text);
 }
