@@ -10,6 +10,7 @@ import {
   type TrimSheetMaps
 } from './textures.js';
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
+import type { RenderCaps } from './renderer.js';
 
 // ============================================================================
 // V-MAT — the shared material library (visual bible §4.2 / §7.4).
@@ -18,10 +19,12 @@ import type { MeshStandardNodeMaterial } from 'three/webgpu';
 // All parameter values live inside the §4.1 PBR ranges; §2 palette hexes are
 // the albedo defaults. No caller may set `.emissive` except via lampEmissive()
 // (§4.4 anti-glow law). This module imports textures only from textures.ts;
-// it never imports renderer state.
+// it never imports renderer STATE — RenderCaps below is the canonical §7.2
+// TYPE from renderer.ts, re-exported for consumers (the p2-flagged duplicate
+// declaration is gone; single source of truth).
 // ============================================================================
 
-export interface RenderCaps { isWebGPU: boolean; tier: 'HIGH' | 'MEDIUM' | 'LOW'; maxAnisotropy: number; }
+export type { RenderCaps };
 
 // --- shared texture caches ----------------------------------------------------
 // Procedural textures are generated once and shared across every material
