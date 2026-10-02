@@ -1,0 +1,24 @@
+== §8.3 clip/crush gates — cloud forest (§2.2 dressing pass) ==
+cf_overview_day            clip= 0.000%  crush=  0.00%  meanL= 166.2  PASS  
+cf_overview_dawn           clip= 0.000%  crush=  0.00%  meanL= 108.0  PASS  
+cf_excavated_ruin_day      clip= 0.121%  crush=  0.00%  meanL= 224.4  PASS  
+cf_lower_blockade_dawn     clip= 0.000%  crush=  0.01%  meanL= 100.6  PASS  
+cf_cliff_staircase_day     clip= 0.003%  crush=  0.00%  meanL= 214.2  PASS  
+cf_overview_390            clip= 0.000%  crush=  0.00%  meanL= 168.0  PASS  
+== §8.3 clip/crush gates — high sierra (§2.3 dressing pass) ==
+hs_overview_day            clip= 0.000%  crush=  0.00%  meanL= 185.6  PASS  (rogue double-sun removed)
+hs_overview_dawn           clip= 0.000%  crush=  0.00%  meanL=  92.5  PASS  
+hs_sayhuite_day            clip= 0.056%  crush=  0.00%  meanL= 228.6  PASS  
+hs_qenko_day               clip= 0.056%  crush=  0.00%  meanL= 228.6  PASS  
+hs_paqarina_dawn           clip= 0.000%  crush=  0.00%  meanL= 130.4  PASS  
+hs_overview_390            clip= 0.000%  crush=  0.00%  meanL= 167.0  PASS  
+== defect ② attribution probe: rogue DirectionalLight(1.5) force-added at build ==
+hs_overview probe vs fixed diff>8: 20.962%  mean|d|= 5.46  PASS  (probe meanL 191.1 vs 185.6 — the over-grade removed)
+   (p10pre_* captures are frame-identical to post: the defect only
+    manifested on region ENTER — regionManager tracks the CHARACTER,
+    which is hidden at spawn in shot mode, so onEnterRegion never fires.
+== J7 determinism pairs (same URL, separate page loads) ==
+cf_overview det A/B        diff>8:  0.000%  mean|d|= 0.00  PASS  (seeded placement; wind-phase cluster exempt)
+hs_overview det A/B        diff>8:  0.000%  mean|d|= 0.00  PASS  (condor orbit + wind cluster, documented)
+
+ALL PASS

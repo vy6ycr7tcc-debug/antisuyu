@@ -1,0 +1,16 @@
+[
+  { "name": "cf_overview_day",      "url": "shot=region:cf_overview" },
+  { "name": "cf_overview_dawn",     "url": "shot=region:cf_overview&tod=dawn" },
+  { "name": "cf_excavated_ruin_day","url": "shot=region:cf_excavated_ruin" },
+  { "name": "cf_lower_blockade_dawn","url": "shot=region:cf_lower_blockade&tod=dawn" },
+  { "name": "cf_cliff_staircase_day","url": "shot=region:cf_cliff_staircase" },
+  { "name": "hs_overview_day",      "url": "shot=region:hs_overview" },
+  { "name": "hs_overview_dawn",     "url": "shot=region:hs_overview&tod=dawn" },
+  { "name": "hs_sayhuite_day",      "url": "shot=region:hs_sayhuite_table" },
+  { "name": "hs_qenko_day",         "url": "shot=region:hs_qenko_marker" },
+  { "name": "hs_paqarina_dawn",     "url": "shot=region:hs_paqarina_descent&tod=dawn" },
+  { "name": "cf_overview_390",      "url": "shot=region:cf_overview", "w": 390, "h": 844 },
+  { "name": "hs_overview_390",      "url": "shot=region:hs_overview", "w": 390, "h": 844 },
+  { "name": "cf_det_repeat",        "url": "shot=region:cf_overview" },
+  { "name": "hs_det_repeat",        "url": "shot=region:hs_overview" }
+]
