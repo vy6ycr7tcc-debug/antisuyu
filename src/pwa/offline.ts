@@ -1,6 +1,6 @@
 export function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
+    const register = () => {
       navigator.serviceWorker.register('/juzu/sw.js').then(registration => {
         console.log('SW registered: ', registration);
 
@@ -35,7 +35,17 @@ export function registerServiceWorker() {
       }).catch(registrationError => {
         console.log('SW registration failed: ', registrationError);
       });
-    });
+    };
+    // P-FRESH: don't rely solely on the `load` event. On slow renderers the
+    // game's async boot (RAPIER init, PMREM capture) can cross the load
+    // boundary, the load listener gets added too late and the SW silently
+    // never registers — measured headless (p13_sw_observe: reg=null, zero SW
+    // console logs). Register immediately when load has already passed.
+    if (document.readyState === 'complete') {
+      register();
+    } else {
+      window.addEventListener('load', register);
+    }
   }
 }
 

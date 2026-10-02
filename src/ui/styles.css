@@ -71,6 +71,14 @@
 #title-screen.hidden {
   opacity: 0;
   pointer-events: none;
+  /* P-FRESH (measured, p13): the base 1.5s opacity transition kept the hidden
+     layer composited on a promoted frame — headless SwiftShader intermittently
+     painted the stale title menu over live gameplay pixels even though
+     visibility:hidden (F13) and hit-testing excluded it. An instant hide (no
+     running transition to keep the layer alive) removes the entire artifact
+     class on every compositor; the fade-IN on open() is preserved by the base
+     rule (transitions read the DESTINATION state). */
+  transition: none;
 }
 
 #title-screen h1 {

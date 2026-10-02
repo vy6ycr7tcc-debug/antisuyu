@@ -50,6 +50,12 @@ function pwaAssetsPlugin(): Plugin {
       if (swChunk && swChunk.type === 'chunk') {
         const assetsJson = JSON.stringify(assets);
         swChunk.code = swChunk.code.replace(/\[\s*[`'"]__PRECACHE_ASSETS__[`'"]\s*\]/, assetsJson);
+        // P-FRESH: every build gets a unique SW cache version. activate purges
+        // every juzu-* cache not in the current version pair, and navigations
+        // are network-first — a deploy can no longer be trapped behind a
+        // permanently-cached shell (the pre-p13 'juzu-cache-v1' trap).
+        const buildVersion = `v-${Date.now()}`;
+        swChunk.code = swChunk.code.replace(/[`'"]__SW_VERSION__[`'"]/, JSON.stringify(buildVersion));
       }
     }
   };
