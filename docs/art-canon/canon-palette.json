@@ -1,0 +1,515 @@
+{
+  "_doctrine": "All values measured from the reference files, not authored by eye.",
+  "references": {
+    "concept-valley": {
+      "file": "concept-valley.jpeg",
+      "size": [
+        2752,
+        1536
+      ],
+      "regions": {
+        "sky_fog_warm": {
+          "median_rgb": [
+            222,
+            198,
+            167
+          ],
+          "median_hex": "#dec6a7",
+          "lum_p10": 159.7,
+          "lum_p90": 240.0,
+          "n": 16384
+        },
+        "mountains_far": {
+          "median_rgb": [
+            137,
+            131,
+            110
+          ],
+          "median_hex": "#89836e",
+          "lum_p10": 106.7,
+          "lum_p90": 176.8,
+          "n": 16384
+        },
+        "foliage_lit": {
+          "median_rgb": [
+            87,
+            101,
+            102
+          ],
+          "median_hex": "#576566",
+          "lum_p10": 27.4,
+          "lum_p90": 119.7,
+          "n": 16384
+        },
+        "foliage_shadow": {
+          "median_rgb": [
+            40,
+            49,
+            51
+          ],
+          "median_hex": "#283133",
+          "lum_p10": 28.9,
+          "lum_p90": 78.8,
+          "n": 16384
+        },
+        "mist_mid": {
+          "median_rgb": [
+            95,
+            102,
+            89
+          ],
+          "median_hex": "#5f6659",
+          "lum_p10": 71.9,
+          "lum_p90": 127.8,
+          "n": 16384
+        },
+        "river": {
+          "median_rgb": [
+            49,
+            64,
+            69
+          ],
+          "median_hex": "#314045",
+          "lum_p10": 10.9,
+          "lum_p90": 133.5,
+          "n": 16384
+        },
+        "ruins_moss": {
+          "median_rgb": [
+            87,
+            95,
+            78
+          ],
+          "median_hex": "#575f4e",
+          "lum_p10": 48.8,
+          "lum_p90": 122.2,
+          "n": 16384
+        }
+      }
+    },
+    "concept-ruins": {
+      "file": "concept-ruins.jpeg",
+      "size": [
+        2752,
+        1536
+      ],
+      "regions": {
+        "fog_cool": {
+          "median_rgb": [
+            102,
+            134,
+            162
+          ],
+          "median_hex": "#6686a2",
+          "lum_p10": 101.6,
+          "lum_p90": 156.5,
+          "n": 16384
+        },
+        "stone_lit": {
+          "median_rgb": [
+            63,
+            63,
+            61
+          ],
+          "median_hex": "#3f3f3d",
+          "lum_p10": 15.1,
+          "lum_p90": 114.2,
+          "n": 16384
+        },
+        "stone_shadow": {
+          "median_rgb": [
+            39,
+            55,
+            53
+          ],
+          "median_hex": "#273735",
+          "lum_p10": 31.7,
+          "lum_p90": 80.5,
+          "n": 16384
+        },
+        "moss_joint": {
+          "median_rgb": [
+            27,
+            38,
+            48
+          ],
+          "median_hex": "#1b2630",
+          "lum_p10": 9.4,
+          "lum_p90": 73.8,
+          "n": 16384
+        },
+        "torch_ember": {
+          "median_rgb": [
+            112,
+            100,
+            97
+          ],
+          "median_hex": "#706461",
+          "lum_p10": 77.9,
+          "lum_p90": 134.2,
+          "n": 16384
+        },
+        "character_kit": {
+          "median_rgb": [
+            108,
+            86,
+            59
+          ],
+          "median_hex": "#6c563b",
+          "lum_p10": 24.6,
+          "lum_p90": 127.3,
+          "n": 16384
+        }
+      }
+    },
+    "concept-character": {
+      "file": "concept-character.jpeg",
+      "size": [
+        2752,
+        1536
+      ],
+      "regions": {
+        "jacket": {
+          "median_rgb": [
+            26,
+            26,
+            24
+          ],
+          "median_hex": "#1a1a18",
+          "lum_p10": 3.6,
+          "lum_p90": 59.4,
+          "n": 16384
+        },
+        "harness_leather": {
+          "median_rgb": [
+            51,
+            38,
+            29
+          ],
+          "median_hex": "#33261d",
+          "lum_p10": 5.4,
+          "lum_p90": 81.3,
+          "n": 16384
+        },
+        "pants": {
+          "median_rgb": [
+            35,
+            27,
+            20
+          ],
+          "median_hex": "#231b14",
+          "lum_p10": 8.9,
+          "lum_p90": 58.1,
+          "n": 16384
+        },
+        "boots": {
+          "median_rgb": [
+            20,
+            19,
+            17
+          ],
+          "median_hex": "#141311",
+          "lum_p10": 7.6,
+          "lum_p90": 47.6,
+          "n": 16384
+        },
+        "backdrop_wood": {
+          "median_rgb": [
+            15,
+            13,
+            10
+          ],
+          "median_hex": "#0f0d0a",
+          "lum_p10": 8.1,
+          "lum_p90": 19.3,
+          "n": 16384
+        }
+      }
+    },
+    "environment-planks": {
+      "file": "environment-planks.jpeg",
+      "size": [
+        2048,
+        2048
+      ],
+      "regions": {
+        "wood_silvered": {
+          "median_rgb": [
+            107,
+            95,
+            84
+          ],
+          "median_hex": "#6b5f54",
+          "lum_p10": 58.7,
+          "lum_p90": 126.0,
+          "n": 16384
+        },
+        "wood_dark_grain": {
+          "median_rgb": [
+            92,
+            80,
+            70
+          ],
+          "median_hex": "#5c5046",
+          "lum_p10": 50.4,
+          "lum_p90": 116.2,
+          "n": 16384
+        },
+        "iron_strap": {
+          "median_rgb": [
+            83,
+            69,
+            62
+          ],
+          "median_hex": "#53453e",
+          "lum_p10": 44.0,
+          "lum_p90": 93.5,
+          "n": 7808
+        },
+        "rope": {
+          "median_rgb": [
+            115,
+            102,
+            89
+          ],
+          "median_hex": "#736659",
+          "lum_p10": 25.1,
+          "lum_p90": 134.1,
+          "n": 7936
+        }
+      }
+    },
+    "environment-stonework": {
+      "file": "environment-stonework.jpeg",
+      "size": [
+        2048,
+        2048
+      ],
+      "regions": {
+        "stone_face": {
+          "median_rgb": [
+            64,
+            60,
+            55
+          ],
+          "median_hex": "#403c37",
+          "lum_p10": 23.3,
+          "lum_p90": 88.9,
+          "n": 16384
+        },
+        "stone_dark": {
+          "median_rgb": [
+            60,
+            59,
+            55
+          ],
+          "median_hex": "#3c3b37",
+          "lum_p10": 35.1,
+          "lum_p90": 82.2,
+          "n": 16384
+        },
+        "joint_moss": {
+          "median_rgb": [
+            61,
+            52,
+            44
+          ],
+          "median_hex": "#3d342c",
+          "lum_p10": 14.9,
+          "lum_p90": 112.2,
+          "n": 16384
+        }
+      }
+    },
+    "environment-foliage": {
+      "file": "environment-foliage.jpeg",
+      "size": [
+        2048,
+        2048
+      ],
+      "regions": {
+        "leaf_dark": {
+          "median_rgb": [
+            50,
+            68,
+            47
+          ],
+          "median_hex": "#32442f",
+          "lum_p10": 15.0,
+          "lum_p90": 104.3,
+          "n": 16384
+        },
+        "leaf_medium": {
+          "median_rgb": [
+            46,
+            62,
+            32
+          ],
+          "median_hex": "#2e3e20",
+          "lum_p10": 11.1,
+          "lum_p90": 110.7,
+          "n": 16384
+        },
+        "leaf_light": {
+          "median_rgb": [
+            86,
+            92,
+            55
+          ],
+          "median_hex": "#565c37",
+          "lum_p10": 15.8,
+          "lum_p90": 180.4,
+          "n": 16384
+        },
+        "moss_under": {
+          "median_rgb": [
+            44,
+            62,
+            21
+          ],
+          "median_hex": "#2c3e15",
+          "lum_p10": 9.7,
+          "lum_p90": 97.7,
+          "n": 16384
+        }
+      }
+    },
+    "environment-forest-floor": {
+      "file": "environment-forest-floor.jpeg",
+      "size": [
+        2048,
+        2048
+      ],
+      "regions": {
+        "humus": {
+          "median_rgb": [
+            25,
+            30,
+            8
+          ],
+          "median_hex": "#191e08",
+          "lum_p10": 5.1,
+          "lum_p90": 62.7,
+          "n": 16384
+        },
+        "moss_clump": {
+          "median_rgb": [
+            38,
+            32,
+            8
+          ],
+          "median_hex": "#262008",
+          "lum_p10": 7.0,
+          "lum_p90": 57.3,
+          "n": 16384
+        },
+        "litter_dry": {
+          "median_rgb": [
+            49,
+            38,
+            31
+          ],
+          "median_hex": "#31261f",
+          "lum_p10": 4.1,
+          "lum_p90": 83.1,
+          "n": 16384
+        },
+        "pebbles": {
+          "median_rgb": [
+            30,
+            26,
+            7
+          ],
+          "median_hex": "#1e1a07",
+          "lum_p10": 4.0,
+          "lum_p90": 73.8,
+          "n": 16384
+        }
+      }
+    },
+    "environment-bark": {
+      "file": "environment-bark.jpeg",
+      "size": [
+        2048,
+        2048
+      ],
+      "regions": {
+        "bark_face": {
+          "median_rgb": [
+            45,
+            43,
+            38
+          ],
+          "median_hex": "#2d2b26",
+          "lum_p10": 14.9,
+          "lum_p90": 76.6,
+          "n": 16384
+        },
+        "bark_deep": {
+          "median_rgb": [
+            44,
+            43,
+            37
+          ],
+          "median_hex": "#2c2b25",
+          "lum_p10": 11.0,
+          "lum_p90": 83.0,
+          "n": 16384
+        },
+        "fissure_moss": {
+          "median_rgb": [
+            35,
+            36,
+            31
+          ],
+          "median_hex": "#23241f",
+          "lum_p10": 11.3,
+          "lum_p90": 72.7,
+          "n": 16384
+        }
+      }
+    },
+    "IMG_2493-ember-vfx": {
+      "file": "IMG_2493.jpeg",
+      "size": [
+        8064,
+        6048
+      ],
+      "regions": {
+        "spark_core": {
+          "median_rgb": [
+            186,
+            167,
+            150
+          ],
+          "median_hex": "#baa796",
+          "lum_p10": 71.2,
+          "lum_p90": 255.0,
+          "n": 16384
+        },
+        "spark_trail": {
+          "median_rgb": [
+            29,
+            28,
+            26
+          ],
+          "median_hex": "#1d1c1a",
+          "lum_p10": 9.1,
+          "lum_p90": 148.8,
+          "n": 16384
+        },
+        "night_ground": {
+          "median_rgb": [
+            1,
+            3,
+            2
+          ],
+          "median_hex": "#010302",
+          "lum_p10": 1.9,
+          "lum_p90": 13.4,
+          "n": 16384
+        }
+      }
+    }
+  }
+}

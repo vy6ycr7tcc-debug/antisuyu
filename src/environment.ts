@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RendererQuality } from './renderer.js';
+import { registerSkyDome } from './bloomSources.js';
 import { WebGPURenderer, PMREMGenerator as WebGPUPMREMGenerator } from 'three/webgpu';
 
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
@@ -191,6 +192,9 @@ export function setupEnvironment(scene: THREE.Scene, quality: RendererQuality, r
   }
 
   scene.add(sky);
+  // Phase 12 selective bloom: the dome lives on SKY_LAYER so the bloom source
+  // (bloom camera, sky bit masked off) never sees it (p9 day-wash flag).
+  registerSkyDome(sky);
   scene.environment = environment;
   scene.environmentIntensity = grade.envIntensity;
 }

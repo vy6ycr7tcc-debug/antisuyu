@@ -1,0 +1,6 @@
+[
+  { "name": "buoyancy_day",       "url": "shot=buoyancy&t=4",          "probe": true },
+  { "name": "buoyancy_dawn",      "url": "shot=buoyancy&t=4&tod=dawn", "probe": true },
+  { "name": "buoyancy_det",       "url": "shot=buoyancy&t=4" },
+  { "name": "buoyancy_probe_late","url": "shot=buoyancy&t=8",          "probe": true }
+]
