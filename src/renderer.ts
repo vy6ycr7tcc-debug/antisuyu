@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
+import { isTouchLikeDevice } from './input.js';
 
 export interface RendererQuality {
   tier: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -88,6 +89,12 @@ export const CinematicShader = {
 export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THREE.WebGLRenderer, quality: RendererQuality }> {
   // Determine quality tier based on device/fps... simplified for now
   let quality = navigator.hardwareConcurrency > 4 ? QUALITY_TIERS.HIGH : QUALITY_TIERS.MEDIUM;
+  // P-MOBILE F9: touch devices start at MEDIUM — iPhones report 6 cores,
+  // which picked HIGH @ pixelRatio min(2, dpr 3): a 780×1688 render from
+  // frame one that the adaptive governor then yanked down 3 s in (visible
+  // stutter). MEDIUM can still climb via the governor. `?quality=` override
+  // below is untouched.
+  if (isTouchLikeDevice()) quality = QUALITY_TIERS.MEDIUM;
 
   const urlParams = new URLSearchParams(window.location.search);
   const qParam = urlParams.get('quality');
