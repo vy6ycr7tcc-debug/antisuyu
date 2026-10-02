@@ -1,0 +1,23 @@
+[
+  { "name": "gate_day",        "url": "shot=character_closeup&tod=day&t=2&nm=1" },
+  { "name": "gate_dawn",       "url": "shot=character_closeup&tod=dawn&t=2&nm=1" },
+  { "name": "gate_dusk",       "url": "shot=character_closeup&tod=dusk&t=2&nm=1" },
+  { "name": "gate_night",      "url": "shot=character_closeup&tod=night&t=2&nm=1" },
+  { "name": "gate_day_390",    "url": "shot=character_closeup&tod=day&t=2&nm=1",  "w": 390, "h": 844 },
+  { "name": "gate_dusk_390",   "url": "shot=character_closeup&tod=dusk&t=2&nm=1", "w": 390, "h": 844 },
+  { "name": "gate_day_slope",  "url": "shot=character_closeup&tod=day&t=2&nm=1&ly=0.45&ch=1.2&cd=2.6" },
+  { "name": "gate_dusk_slope", "url": "shot=character_closeup&tod=dusk&t=2&nm=1&ly=0.45&ch=1.2&cd=2.6" },
+  { "name": "gate_valley_day",  "url": "shot=valley_overview&tod=day&t=2" },
+  { "name": "gate_valley_dawn", "url": "shot=valley_overview&tod=dawn&t=2" },
+  { "name": "gate_mc_day",     "url": "shot=material_check&tod=day&t=2" },
+  { "name": "gate_mc_dawn",    "url": "shot=material_check&tod=dawn&t=2" },
+  { "name": "gate_shadow_day", "url": "shot=shadow_check&tod=day&t=2" },
+  { "name": "gate_dusk_rep",   "url": "shot=character_closeup&tod=dusk&t=2&nm=1" },
+  { "name": "lamp_on",         "url": "shot=character_closeup&tod=night&t=2&cx=150&cz=-300&cd=14&ch=2.5&ly=4&nm=1" },
+  { "name": "lamp_off",        "url": "shot=character_closeup&tod=night&t=2&cx=150&cz=-300&cd=14&ch=2.5&ly=4&nm=1&bt=99" },
+  { "name": "grain_off_dusk",  "url": "shot=character_closeup&tod=dusk&t=2&nm=1&gs=0" },
+  { "name": "raw_day",         "url": "shot=character_closeup&tod=day&t=2&nm=1&tv=1" },
+  { "name": "raw_dusk",        "url": "shot=character_closeup&tod=dusk&t=2&nm=1&tv=1" },
+  { "name": "raw_dawn",        "url": "shot=character_closeup&tod=dawn&t=2&nm=1&tv=1" },
+  { "name": "raw_night",       "url": "shot=character_closeup&tod=night&t=2&nm=1&tv=1" }
+]

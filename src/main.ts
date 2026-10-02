@@ -346,22 +346,45 @@ async function init() {
   const isWebGPU = renderer instanceof WebGPURenderer;
   const skipPost = urlParams.get('tv') === '1';
 
+  // Phase 9 V-POST adjudication levers (p8 &sx= pattern): §5.4 defaults, overridable
+  // per capture so each post stage can be isolated/retuned without code forks.
+  //   &bt= bloom threshold   (§5.4 default 0.85)
+  //   &bs= bloom strength    (§5.4 default 0.35)
+  //   &br= bloom radius      (§5.4 default 0.4)
+  //   &vs= vignette strength (display-referred; §5.4 original 0.55 retuned → 0.25
+  //        by the p9 measured sweep — 0 = off)
+  //   &gs= grain amplitude   (§5.4 default 0.035; 0 = off)
+  // Both post paths consume the SAME five numbers (§5.4 convergence rule).
+  const postNum = (k: string, d: number) => {
+    const s = urlParams.get(k);
+    return s === null ? d : parseFloat(s);
+  };
+  const bloomThreshold = postNum('bt', 0.85);
+  const bloomStrength = postNum('bs', 0.35);
+  const bloomRadius = postNum('br', 0.4);
+  const vignetteStrength = postNum('vs', 0.25);
+  const grainAmount = postNum('gs', 0.035);
+
   if (!skipPost) {
       if (isWebGPU) {
           // WebGPU TSL Post Processing.
-          // Tone mapping + exposure are NOT applied here: PostProcessing's
-          // default output transform already applies renderer.toneMapping
-          // (ACES) and renderer.toneMappingExposure (set from the TOD grade
-          // in environment.ts). Adding them in-graph double-grades the frame
-          // to white — visual bible §5.4.
-          const { pass, uv, float, vec4, Fn, vec2, fract } = await import('three/tsl');
+          // Phase 9 (J8): the cinematic grade is DISPLAY-referred — tone mapping
+          // (ACES + TOD exposure) + sRGB encode happen IN-GRAPH via renderOutput()
+          // BEFORE the vignette/grain, and PostProcessing's default end-of-graph
+          // transform is disabled (outputColorTransform = false) so the frame is
+          // graded exactly once. This mirrors the WebGL2 pass order: bloom (HDR)
+          // → OutputPass → grade. (Pre-p9 the grade ran on linear HDR: the
+          // ±0.035 grain was ±30 SDR levels on shadow pixels — the measured dusk
+          // edge-crush driver. The p1 double-grade lesson is respected: the
+          // default transform is REMOVED, not stacked on.)
+          const { pass, uv, float, vec4, Fn, vec2, fract, renderOutput } = await import('three/tsl');
           const { PostProcessing: PostProcessingCtor } = await import('three/webgpu');
           const { bloom } = await import('three/examples/jsm/tsl/display/BloomNode.js');
 
           const scenePass = pass( scene, camera );
 
-          // Bloom: strength 0.35, radius 0.4, threshold 0.85 (§5.4)
-          const bloomPass = bloom(scenePass, 0.35, 0.4, 0.85);
+          // Bloom: §5.4 (0.35, 0.4, 0.85) — levered for the p9 attribution A/Bs
+          const bloomPass = bloom(scenePass, bloomStrength, bloomRadius, bloomThreshold);
 
           const random = Fn(([p]: [any]) => {
               const K1 = vec2(23.14069263277926, 2.665144142690225);
@@ -375,30 +398,42 @@ async function init() {
              const texNode = convertToTexture(inputNode);
 
              // Chromatic Aberration — channel-resampled at the source texture
+             // (HDR; a pure spatial resample, ±0.0015 uv)
              const offset = vec2(0.0015, 0.0);
              const r = texNode.sample(uvNode.add(offset)).r;
              const g = texNode.sample(uvNode).g;
              const b = texNode.sample(uvNode.sub(offset)).b;
              const a = texNode.sample(uvNode).a;
-             let col = vec4(r, g, b, a);
 
-             // Vignette
+             // Tone map + encode IN-GRAPH — display-referred from here on,
+             // mirroring OutputPass on the WebGL2 path.
+             let col = renderOutput(vec4(r, g, b, a)).rgb;
+
+             // Vignette (display-referred)
              const dist = uvNode.sub(0.5).length();
-             const factor = float(1.0).sub(dist.mul(0.55)).clamp(0.0, 1.0);
-             col = vec4(col.rgb.mul(factor), col.a);
+             const factor = float(1.0).sub(dist.mul(vignetteStrength)).clamp(0.0, 1.0);
+             col = col.mul(factor);
 
-             // Film Grain — static to ensure deterministic frames for A/B convergence.
-             const noise = random(uvNode).sub(0.5).mul(0.035);
-             col = vec4(col.rgb.add(noise), col.a);
+             // Film Grain — static (deterministic A/B frames) + display-referred
+             // (±0.035 SDR ≈ ±9/255, the §5.4 intent)
+             const noise = random(uvNode).sub(0.5).mul(grainAmount);
+             col = col.add(noise);
 
-             return col;
+             return vec4(col, a);
           } );
 
           postProcessing = new PostProcessingCtor( renderer as WebGPURenderer );
+          postProcessing.outputColorTransform = false;
           postProcessing.outputNode = cinematicNode(bloomPass);
 
       } else {
           // WebGL2 Post Processing — same grade as the WebGPU graph (§5.4).
+          // Phase 9 (J8): OutputPass (tone map + sRGB encode; its encode keys off
+          // renderer.outputColorSpace, so mid-chain placement is supported — the
+          // OutputPass docs bless sRGB-consuming followers) runs BEFORE the
+          // cinematic grade, so vignette/grain operate display-referred: grain
+          // ±0.035 is ±9/255 (the §5.4 intent), not the pre-p9 linear-HDR
+          // ±30 SDR levels on shadows that measured as the dusk edge-crush.
           const { EffectComposer: EffectComposerCtor } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
           const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
           const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
@@ -411,16 +446,19 @@ async function init() {
 
           // iPhone budget rule: Bloom at half resolution on WebGL2 fallback
           const bloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
-          const bloomPass = new UnrealBloomPass(bloomRes, 0.35, 0.4, 0.85);
+          const bloomPass = new UnrealBloomPass(bloomRes, bloomStrength, bloomRadius, bloomThreshold);
           composer.addPass(bloomPass);
+
+          // Tone map + encode BEFORE the grade (display-referred grade, J8)
+          const outputPass = new OutputPass();
+          composer.addPass(outputPass);
 
           cinematicPass = new ShaderPass(CinematicShader);
           // Set deterministic time for WebGL2 grain
           cinematicPass.uniforms['time'].value = 0.0;
+          cinematicPass.uniforms['vignetteStrength'].value = vignetteStrength;
+          cinematicPass.uniforms['grainAmount'].value = grainAmount;
           composer.addPass(cinematicPass);
-
-          const outputPass = new OutputPass();
-          composer.addPass(outputPass);
       }
   }
   // V-POST: post-processing block end

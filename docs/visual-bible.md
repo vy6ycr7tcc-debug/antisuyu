@@ -425,13 +425,23 @@ pipeline already does this — copy that pattern). The WebGL2 branch must never 
 
 ### 5.4 Post pipeline values (both paths must converge)
 
+**J8 amendment (Phase 9):** the cinematic grade — vignette, film grain — is
+**display-referred**: tone mapping (ACES + TOD exposure) + sRGB encode happen BEFORE
+the grade (WebGL2: `OutputPass` mid-chain, `CinematicShader` last; WebGPU: in-graph
+`renderOutput()` with `outputColorTransform = false`). Bloom stays scene-referred HDR
+(threshold/strength/radius unchanged). The pre-p9 chain graded in linear HDR, where
+the ±0.035 grain was ±30 SDR levels on shadow pixels — the measured driver of the
+p7 dusk edge-crush XFAIL (14.32% <10) — and the 0.55 vignette was tuned for that
+space. Retuned by the p9 measured sweep: **0.55 → 0.25**. One pass's flag: grain is
+static (deterministic A/B frames); animate only if shot-mode determinism is reworked.
+
 | Stage | WebGPU (TSL) | WebGL2 (EffectComposer) |
 |---|---|---|
-| Bloom | threshold 0.85, strength 0.35, radius 0.4 | `UnrealBloomPass(res, strength 0.35, radius 0.4, threshold 0.85)` |
-| Vignette | multiply `1 - dist(uv,0.5)*0.55`, clamp 0..1 (current factor 1.2 is too strong — retune to 0.55) | fold into `CinematicShader` |
-| Film grain | ±0.035 luminance noise, animated | `CinematicShader` amount 0.035 (current 0.1 noise amplitude is too strong — retune) |
-| Chromatic aberration | 0.0015 uv offset at edges | `CinematicShader` amount 0.0015 (current 0.005 — retune) |
-| Output | tone-mapped output node | `OutputPass` (existing) |
+| Bloom | threshold 0.85, strength 0.35, radius 0.4 (scene-referred HDR; UNCHANGED by J8) | `UnrealBloomPass(res, strength 0.35, radius 0.4, threshold 0.85)` |
+| Output transform | `renderOutput()` in-graph + `outputColorTransform = false` | `OutputPass` (mid-chain, before the grade) |
+| Vignette | multiply `1 - dist(uv,0.5)*0.25`, clamp 0..1 (J8: display-referred; 0.55 measured too heavy — retuned) | fold into `CinematicShader` |
+| Film grain | ±0.035 display-space luminance noise, static | `CinematicShader` amount 0.035 |
+| Chromatic aberration | 0.0015 uv offset at edges (HDR resample) | `CinematicShader` amount 0.0015 |
 
 **RULE:** A/B the two paths on the same `?shot=` id. If the WebGL2 frame is visibly
 more "cinematic" than the WebGPU frame (or vice versa) beyond tone-mapping nuance, the
@@ -719,6 +729,18 @@ V-POST touches only the clearly-delimited post-processing block.
   frustum at d=120/90 and tightened normalBias (2.0 → 1.5) to restore contact shadows.
 - **J7 — `volumetrics.ts` uses `Math.random()`.** Shaft placement changes every load,
   which breaks shot-to-shot comparability for the visual gate. Mandated seeded placement.
+- **J8 — The cinematic grade was linear-referred; its constants were display-space
+  numbers.** §5.4's "±0.035 luminance" grain and the 0.55 vignette were applied to
+  LINEAR HDR values pre-tonemap. Measured (Phase 9): the grain alone was ±30 SDR
+  levels on shadow pixels — the p7 dusk edge-crush XFAIL (14.32% <10, raw 2.54%) —
+  and the sky-heavy day wash (p7 9.73% clip) rode on bloom ADD that the pre-tonemap
+  vignette could not bound. Restructured both paths so the grade is display-referred
+  (tonemap+encode BEFORE CA/vignette/grain; bloom stays HDR) and the vignette was
+  re-swept for the new space (0.55 → 0.25). Dusk composed crush 14.32 → 2.19%; day
+  composed clip 9.73 → 0.000%; the dawn valley XFAIL improved 34.95 → 33.52 and the
+  valley_overview dawn XFAIL (10.47%) now passes at 0.09%. Bloom's day-sky glow
+  residual is flagged for a future selective (emissive-only) bloom pass — no linear
+  threshold separates the day sky (radiance 2–50) from the lamps (2.0).
 
 ---
 

@@ -1,0 +1,17 @@
+[
+  { "name": "base_day",        "url": "shot=character_closeup&tod=day&t=2" },
+  { "name": "base_dusk",       "url": "shot=character_closeup&tod=dusk&t=2" },
+  { "name": "base_dawn",       "url": "shot=character_closeup&tod=dawn&t=2" },
+  { "name": "base_night",      "url": "shot=character_closeup&tod=night&t=2" },
+  { "name": "base_day_390",    "url": "shot=character_closeup&tod=day&t=2",  "w": 390, "h": 844 },
+  { "name": "base_dusk_390",   "url": "shot=character_closeup&tod=dusk&t=2", "w": 390, "h": 844 },
+  { "name": "base_vo_day",     "url": "shot=valley_overview&tod=day&t=2" },
+  { "name": "day_bt99",        "url": "shot=character_closeup&tod=day&t=2&bt=99" },
+  { "name": "day_vs0",         "url": "shot=character_closeup&tod=day&t=2&vs=0" },
+  { "name": "day_gs0",         "url": "shot=character_closeup&tod=day&t=2&gs=0" },
+  { "name": "day_raw",         "url": "shot=character_closeup&tod=day&t=2&tv=1" },
+  { "name": "dusk_bt99",       "url": "shot=character_closeup&tod=dusk&t=2&bt=99" },
+  { "name": "dusk_vs0",        "url": "shot=character_closeup&tod=dusk&t=2&vs=0" },
+  { "name": "dusk_gs0",        "url": "shot=character_closeup&tod=dusk&t=2&gs=0" },
+  { "name": "dusk_raw",        "url": "shot=character_closeup&tod=dusk&t=2&tv=1" }
+]
