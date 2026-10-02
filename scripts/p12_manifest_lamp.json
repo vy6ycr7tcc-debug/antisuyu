@@ -1,0 +1,22 @@
+[
+ {
+  "name": "lamp_night_sel1",
+  "url": "shot=character_closeup&cx=150&cz=-300&cd=16&ch=2.5&ly=3&nc=1&tod=night&t=1"
+ },
+ {
+  "name": "lamp_night_sel0",
+  "url": "shot=character_closeup&cx=150&cz=-300&cd=16&ch=2.5&ly=3&nc=1&tod=night&t=1&sel=0"
+ },
+ {
+  "name": "lamp_night_bt99",
+  "url": "shot=character_closeup&cx=150&cz=-300&cd=16&ch=2.5&ly=3&nc=1&tod=night&t=1&bt=99"
+ },
+ {
+  "name": "lamp_dawn_sel1",
+  "url": "shot=character_closeup&cx=150&cz=-300&cd=16&ch=2.5&ly=3&nc=1&tod=dawn&t=1"
+ },
+ {
+  "name": "lamp_dawn_sel0",
+  "url": "shot=character_closeup&cx=150&cz=-300&cd=16&ch=2.5&ly=3&nc=1&tod=dawn&t=1&sel=0"
+ }
+]

@@ -1,0 +1,37 @@
+== §8.3 clip/crush gates — region rows (p11 core matrix, selective bloom ON) ==
+jl_overview_day            clip= 0.000%  crush=  0.00%  meanL=  89.2  PASS  
+jl_overview_dawn           clip= 0.000%  crush=  0.00%  meanL=  49.1  PASS  
+jl_serpents_path_day       clip= 0.000%  crush=  0.00%  meanL= 117.8  PASS  
+jl_trembling_day           clip= 0.000%  crush=  0.00%  meanL= 168.0  PASS  
+jl_vanguard_dawn           clip= 0.000%  crush=  0.83%  meanL= 138.8  PASS  
+jl_overview_390            clip= 0.000%  crush=  0.00%  meanL=  90.6  PASS  
+pa_overview_day            clip= 0.000%  crush=  0.00%  meanL= 136.3  PASS  
+pa_overview_dawn           clip= 0.000%  crush=  0.17%  meanL=  98.7  PASS  
+pa_plaza_day               clip= 0.000%  crush=  0.00%  meanL= 139.0  PASS  
+pa_terraces_day            clip= 0.000%  crush=  0.00%  meanL= 156.9  PASS  
+pa_sanctuary_day           clip= 0.000%  crush=  0.00%  meanL= 141.4  PASS  
+pa_aqueduct_day            clip= 0.000%  crush=  0.00%  meanL= 101.7  PASS  
+pa_overview_390            clip= 0.000%  crush=  0.00%  meanL= 135.9  PASS  
+== §8.3 clip/crush gates — p9 headline rows (selective bloom ON) ==
+cc_day                     clip= 0.000%  crush=  0.00%  meanL= 119.7  PASS  (sel=1 default)
+cc_dusk                    clip= 0.000%  crush=  2.19%  meanL=  61.4  PASS  
+mc_day                     clip= 0.000%  crush=  0.00%  meanL= 136.6  PASS  
+mc_dawn                    clip= 0.000%  crush=  9.76%  meanL= 140.2  PASS  (lt=3.0 recorded config)
+vo_day                     clip= 0.000%  crush=  0.00%  meanL= 134.3  PASS  
+== work item A — selective bloom A/Bs ==
+lamp_night sel1 vs bt99 [XFAIL] diff>8:  0.000%  mean|d|= 0.00  FAIL  (XFAIL in-container: halo < 8 lv; cores render; on-device owed)
+lamp_night sel0 vs bt99    diff>8: 28.318%  mean|d|= 8.77  PASS  (p9 whole-scene halo — reference; incl. the sky lift)
+lamp_night sel1 vs sel0    diff>8: 28.318%  mean|d|= 8.77  PASS  (sky-glow delta between chains)
+lamp_dawn sel1 vs sel0     diff>8: 63.201%  mean|d|=21.31  PASS  (dawn-sky wash removed by sel=1)
+cc_day meanL chain: sel1=119.69  sel0(p9 chain)=178.63  raw(bt99)=119.69  -> sel1-vs-raw residual=0.00  sel0-vs-raw=58.94
+cc_day sel1 vs sel0        diff>8: 97.575%  mean|d|=58.94  PASS  (wash removal)
+vo_day sel1 vs sel0        diff>8:  0.907%  mean|d|= 0.55  PASS  (sky glow delta; region content identical)
+jl_overview sel1 vs sel0   diff>8:  7.043%  mean|d|= 3.40  PASS  (sky glow delta; region content identical)
+== work item B — buoyancy ==
+buoyancy pre->post day     diff>8:  5.726%  mean|d|= 2.70  PASS  (logs risen from bed to surface)
+buoyancy pre->post dawn    diff>8:  4.622%  mean|d|= 1.10  PASS  (logs risen from bed to surface)
+buoyancy det repeat        diff>8:  0.000%  mean|d|= 0.00  PASS  (seeded spawns, fixed step)
+jl det repeat              diff>8:  0.000%  mean|d|= 0.00  PASS  (documented wind-phase cluster family)
+cc det repeat              diff>8:  0.000%  mean|d|= 0.00  PASS  (documented wind-phase cluster family)
+
+GATE: PASS
