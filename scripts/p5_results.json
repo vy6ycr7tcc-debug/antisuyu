@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-10-02T04:17:15.840Z",
-  "url": "http://localhost:5173/juzu/?touch=1&turbo=1",
+  "timestamp": "2026-10-02T06:21:19.260Z",
+  "url": "http://localhost:3000/juzu/?touch=1&turbo=1",
   "viewport": "390x844@1x touch (iPhone 14 geometry), WebGL2 SwiftShader headless",
   "gates": [
     {
@@ -8,7 +8,7 @@
       "pass": true,
       "detail": {
         "revealedWithinFrames": 1,
-        "wallMs": 29420,
+        "wallMs": 4720,
         "criterion": "menu list reveals within 8 rendered frames of the tap (frame-synced; wall clock inflated only by SwiftShader)"
       }
     },
@@ -26,8 +26,19 @@
       "pass": true,
       "detail": {
         "stabilized": true,
+        "probeLog": [
+          {
+            "spot": [
+              26,
+              34
+            ],
+            "state": "WALK",
+            "drift": 0,
+            "dry": true
+          }
+        ],
         "fullDeflection": {
-          "maxDisplacement_m": 3.77,
+          "maxDisplacement_m": 8.71,
           "maxSpeed": 5
         },
         "halfDeflection": {
@@ -44,7 +55,7 @@
         "theta0": 0,
         "theta1": 2,
         "dTheta": 2,
-        "rightPointerClaimed": 7,
+        "rightPointerClaimed": 6,
         "accumulatedCamX": -40,
         "criterion": "|dTheta| >= 0.3 rad with stick idle (200 px drag)"
       }
@@ -63,12 +74,11 @@
       "pass": true,
       "detail": {
         "tierStart": "MEDIUM",
-        "tierEnd": "LOW",
+        "tierEnd": "MEDIUM",
         "tierSeries": [
-          "MEDIUM",
-          "LOW"
+          "MEDIUM"
         ],
-        "headlessFpsMean": 1.4,
+        "headlessFpsMean": 0.9,
         "criterion": "touch device starts at MEDIUM (F9); governor series recorded as evidence — SwiftShader fps is not an on-device claim"
       }
     },
@@ -112,20 +122,20 @@
     }
   ],
   "fpsSeries": [
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.4,
-    1.5,
-    1.5
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9,
+    0.9
   ]
 }

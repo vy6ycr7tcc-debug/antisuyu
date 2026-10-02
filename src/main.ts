@@ -1180,6 +1180,18 @@ async function init() {
     // per rAF. Off by default; zero effect on normal play or §8 captures.
     const turboSteps = urlParams.get('turbo') === '1' ? 60 : 1;
 
+    // P-MOBILE verification tooling (&turbo=1 only): deterministic spawn for
+    // the functional gate suite. Walking "out of the river" coupled G3 to
+    // terrain topology — V-WATER's raised water table turned the old walk-out
+    // into an endless SWIM. The suite now probes candidate spots with this
+    // hook and self-selects the first measured-dry one. Never reachable in
+    // normal play (no turbo param, no exposure).
+    if (urlParams.get('turbo') === '1' && !(window as any).__testTeleport) {
+      (window as any).__testTeleport = (x: number, z: number, theta = 0) => {
+        character.teleport(x, z, theta);
+      };
+    }
+
     if (!shotMode) {
       for (let step = 0; step < turboSteps; step++) {
         const dt = turboSteps > 1 ? 1 / 60 : rawDt;
