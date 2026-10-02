@@ -274,7 +274,7 @@ export function ashlarLight(): THREE.MeshStandardMaterial {
 // Ashlar weathered (Paititi shadow faces / older structures) — weathered 0.85–0.95
 export function ashlarWeathered(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0xA89E86,
+        color: 0x34322e, // P-CANON-2: ashlar shadow → darker than plazaWorn, granite family
         roughness: 0.9,
         metalness: 0.0,
         normalMap: getNormalMap(),
@@ -298,7 +298,7 @@ export function granite(): THREE.MeshStandardMaterial {
 // Limestone swallowed (Jungle lowlands ruined stone, heavy moss)
 export function limestoneSwallowed(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0xB8B0A0,
+        color: 0x3d3c37, // P-CANON-2: limestone → canon granite band (L≈60)
         roughness: 0.9,
         metalness: 0.0,
         normalMap: getNormalMap(),
@@ -310,7 +310,7 @@ export function limestoneSwallowed(): THREE.MeshStandardMaterial {
 // Plaza worn (worn paving, polished by feet) — 0.45–0.55
 export function plazaWorn(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x9A917E,
+        color: 0x403c37, // P-CANON-2: plaza → canon granite band upper (L≈60)
         roughness: 0.5,
         metalness: 0.0,
         normalMap: getNormalMap(),
@@ -340,7 +340,7 @@ export function caveDark(): THREE.MeshStandardMaterial {
 // Humus/earth (§2.2: ground, excavation pit) — raw wet earth
 export function humusEarth(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x3B2E22,
+        color: 0x26200f, // P-CANON-2: humus → canon floor band (L≈32)
         roughness: 0.95,
         metalness: 0.0,
         normalMap: getNormalMap(),
@@ -352,7 +352,7 @@ export function humusEarth(): THREE.MeshStandardMaterial {
 // Moss (§2.2: stone/wood moss patches) — roughness 0.95 per palette row
 export function mossPatch(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x5A7247,
+        color: 0x2c3e15, // P-CANON-2: moss → canon moss anchor (L≈55)
         roughness: 0.95,
         metalness: 0.0,
         normalMap: getNormalMap(),
@@ -375,7 +375,7 @@ export function lichenPatch(): THREE.MeshStandardMaterial {
 
 // Broadleaf card (§2.2 canopy greens #2D4A22 / #3E5E2A) — foliage card read,
 // two-sided because cards are flat planes seen from both sides (V-FOLIAGE style)
-export function broadleafCard(hex: number = 0x3E5E2A): THREE.MeshStandardMaterial {
+export function broadleafCard(hex: number = 0x303f24): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
         color: hex,
         roughness: 0.8,
@@ -465,7 +465,7 @@ export function copperWorn(): THREE.MeshStandardMaterial {
 // Wood aged (old structures, barricades) — wood 0.8–0.9
 export function woodAged(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x5C4033,
+        color: 0x2d2b26, // P-CANON-2: wood aged → canon fissured bark anchor (L≈42)
         roughness: 0.85,
         metalness: 0.0,
         normalMap: getNormalMap(),

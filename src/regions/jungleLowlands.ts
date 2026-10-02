@@ -111,7 +111,7 @@ export const jungleLowlands: RegionModule = {
     const emissiveSpiralMat = ashlarWeathered();
     emissiveSpiralMat.color.setHex(0xC9A86A);
     const barricadeStoneMat = ashlarWeathered();
-    barricadeStoneMat.color.setHex(0xB8B0A0);
+    barricadeStoneMat.color.setHex(0x3d3c37);
 
     const caps: RenderCaps = {
       isWebGPU: typeof navigator !== 'undefined' && !!(navigator as unknown as { gpu?: unknown }).gpu,

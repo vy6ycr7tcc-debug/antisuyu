@@ -108,13 +108,13 @@ const REGION_SPECIES: Record<RegionId, SpeciesPalette[]> = {
   cloud_forest: [
     // §2.2: canopy deep/mid green, broadleaf cards, orchid accents (≤2% frame)
     { id: 'cf_broadleaf', kind: 'broadleaf', cardW: 5.5, cardH: 4.8, planes: 3, y0: 2.2,
-      grids: { mid: 0.55, coarse: 0.1 }, colorA: 0x2D4A22, colorB: 0x3E5E2A,
+      grids: { mid: 0.55, coarse: 0.1 }, colorA: 0x2c3e22, colorB: 0x32442f,
       scaleMin: 0.75, scaleMax: 1.35, count: 700, windAmp: 0.15, shadow: true, trunk: true },
     { id: 'cf_fern', kind: 'fern', cardW: 1.7, cardH: 1.5, planes: 3, y0: 0,
-      grids: { mid: 0.5 }, colorA: 0x2D4A22, colorB: 0x3E5E2A,
+      grids: { mid: 0.5 }, colorA: 0x2c3e22, colorB: 0x32442f,
       scaleMin: 0.65, scaleMax: 1.3, count: 850, windAmp: 0.15, shadow: false },
     { id: 'cf_tuft', kind: 'grass', cardW: 1.0, cardH: 0.85, planes: 2, y0: 0,
-      grids: { fine: 0.55 }, colorA: 0x5A7247, colorB: 0x3E5E2A,
+      grids: { fine: 0.55 }, colorA: 0x2c3e15, colorB: 0x32442f,
       scaleMin: 0.7, scaleMax: 1.5, count: 800, windAmp: 0.15, shadow: false },
     { id: 'cf_orchid', kind: 'orchid', cardW: 0.55, cardH: 0.5, planes: 2, y0: 0,
       grids: { mid: 0.09 }, colorA: 0xC9A0DC, colorB: 0xB892CC,
@@ -135,26 +135,26 @@ const REGION_SPECIES: Record<RegionId, SpeciesPalette[]> = {
   jungle_lowlands: [
     // §2.4: canopy dark / understory green — dense, swallowed by vegetation
     { id: 'jl_fern', kind: 'fern', cardW: 1.9, cardH: 1.65, planes: 3, y0: 0,
-      grids: { mid: 0.55 }, colorA: 0x1E3A1E, colorB: 0x2F5230,
+      grids: { mid: 0.55 }, colorA: 0x2a3e20, colorB: 0x2f4229,
       scaleMin: 0.7, scaleMax: 1.4, count: 950, windAmp: 0.15, shadow: false },
     { id: 'jl_broadleaf', kind: 'broadleaf', cardW: 6.0, cardH: 5.2, planes: 3, y0: 2.4,
-      grids: { mid: 0.5, coarse: 0.12 }, colorA: 0x1E3A1E, colorB: 0x2F5230,
+      grids: { mid: 0.5, coarse: 0.12 }, colorA: 0x2a3e20, colorB: 0x2f4229,
       scaleMin: 0.8, scaleMax: 1.5, count: 850, windAmp: 0.15, shadow: true, trunk: true },
     { id: 'jl_tuft', kind: 'grass', cardW: 1.1, cardH: 0.9, planes: 2, y0: 0,
-      grids: { fine: 0.55 }, colorA: 0x2F5230, colorB: 0x1E3A1E,
+      grids: { fine: 0.55 }, colorA: 0x2f4229, colorB: 0x2a3e20,
       scaleMin: 0.7, scaleMax: 1.5, count: 850, windAmp: 0.15, shadow: false },
   ],
   paititi: [
     // §2.5: encroaching green at the city's edges only — the city itself is
     // maintained stone (paititiEdgeFalloff scales all three probabilities).
     { id: 'pa_tuft', kind: 'grass', cardW: 1.0, cardH: 0.85, planes: 2, y0: 0,
-      grids: { fine: 0.25 }, colorA: 0x2E5A2E, colorB: 0x46603A,
+      grids: { fine: 0.25 }, colorA: 0x2c3e15, colorB: 0x32442f,
       scaleMin: 0.7, scaleMax: 1.4, count: 500, windAmp: 0.15, shadow: false },
     { id: 'pa_fern', kind: 'fern', cardW: 1.6, cardH: 1.4, planes: 3, y0: 0,
-      grids: { mid: 0.12 }, colorA: 0x2E5A2E, colorB: 0x44603C,
+      grids: { mid: 0.12 }, colorA: 0x2c3e15, colorB: 0x32442f,
       scaleMin: 0.7, scaleMax: 1.3, count: 450, windAmp: 0.15, shadow: false },
     { id: 'pa_broadleaf', kind: 'broadleaf', cardW: 5.0, cardH: 4.4, planes: 3, y0: 2.0,
-      grids: { mid: 0.06, coarse: 0.02 }, colorA: 0x2E5A2E, colorB: 0x3E6E3A,
+      grids: { mid: 0.06, coarse: 0.02 }, colorA: 0x2c3e15, colorB: 0x32442f,
       scaleMin: 0.7, scaleMax: 1.2, count: 250, windAmp: 0.15, shadow: true, trunk: true },
   ],
 };
