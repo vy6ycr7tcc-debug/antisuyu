@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
+import { isTouchLikeDevice } from './input.js';
 
 export interface RendererQuality {
   tier: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -32,6 +33,34 @@ export function getRenderCaps(renderer: THREE.WebGLRenderer | WebGPURenderer, qu
     maxAnisotropy: renderer instanceof WebGPURenderer ? 8 : 4
   };
 }
+
+// Phase 12 (p9 flag, §5.4): selective bloom mix — HDR add of the lamp-only
+// bloom source over the main render, BEFORE OutputPass (J8 order preserved:
+// bloom (HDR) → tonemap+encode → display-referred grade). Same composition as
+// the official selective-bloom example, rgb-only (alpha from the base pass).
+export const BloomMixShader = {
+    uniforms: {
+        "baseTexture": { value: null },
+        "bloomTexture": { value: null }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D baseTexture;
+        uniform sampler2D bloomTexture;
+        varying vec2 vUv;
+        void main() {
+            vec4 base = texture2D( baseTexture, vUv );
+            vec3 bloom = texture2D( bloomTexture, vUv ).rgb;
+            gl_FragColor = vec4( bloom, 1.0 ); // DEBUG-TEMP bloomonly
+        }
+    `
+};
 
 // Film Grain & Chromatic Aberration Shader for WebGL2
 export const CinematicShader = {
@@ -97,6 +126,12 @@ export const CinematicShader = {
 export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THREE.WebGLRenderer, quality: RendererQuality }> {
   // Determine quality tier based on device/fps... simplified for now
   let quality = navigator.hardwareConcurrency > 4 ? QUALITY_TIERS.HIGH : QUALITY_TIERS.MEDIUM;
+  // P-MOBILE F9: touch devices start at MEDIUM — iPhones report 6 cores,
+  // which picked HIGH @ pixelRatio min(2, dpr 3): a 780×1688 render from
+  // frame one that the adaptive governor then yanked down 3 s in (visible
+  // stutter). MEDIUM can still climb via the governor. `?quality=` override
+  // below is untouched.
+  if (isTouchLikeDevice()) quality = QUALITY_TIERS.MEDIUM;
 
   const urlParams = new URLSearchParams(window.location.search);
   const qParam = urlParams.get('quality');

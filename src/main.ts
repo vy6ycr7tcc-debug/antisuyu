@@ -16,7 +16,8 @@ import { physics } from './physics.js';
 import { initUI, updateUI } from './ui/index.js';
 import { ParticleSystem } from './particles.js';
 import { VolumetricLightShafts } from './volumetrics.js';
-import { CinematicShader } from './renderer.js';
+import { CinematicShader, BloomMixShader } from './renderer.js';
+import { initBloomCamera, syncBloomCamera, getBloomCamera } from './bloomSources.js';
 import { createQuestFlags } from './save/questFlags.js';
 import { createSaveSystem } from './save/saveSystem.js';
 import { REGIONS } from './regions/registry.js';
@@ -36,6 +37,13 @@ declare global {
     __frameDataURL?: string;
     __ktx2Supported?: boolean;
     __atmosDebug?: { dust: THREE.Points; pollen: THREE.Points; motes: THREE.Points };
+    // Phase 12 buoyancy probe (p5 flag; same discipline as __shadowInfo):
+    // per-body state under the fixed-step buoyancy model — position, vertical
+    // velocity, and the water surface height from the shared river.ts solve
+    // (null = dry). Populated only in &shot=buoyancy.
+    __buoyancyProbe?: () => {
+      x: number; y: number; z: number; vy: number; surface: number | null;
+    }[];
     __charDebug?: {
       pos: THREE.Vector3; rotY: number; visible: boolean; state: string; camPos: THREE.Vector3;
     };
@@ -345,6 +353,10 @@ async function init() {
   let postProcessing: PostProcessing | null = null;
   const isWebGPU = renderer instanceof WebGPURenderer;
   const skipPost = urlParams.get('tv') === '1';
+  // Phase 12 (p9 flag): selective emissive-only bloom (proxy-scene source).
+  // &sel=0 rebuilds the EXACT p9 whole-scene chain for attribution A/Bs.
+  let selectiveBloom = false;
+  let bloomComposer: EffectComposer | null = null;
 
   // Phase 9 V-POST adjudication levers (p8 &sx= pattern): §5.4 defaults, overridable
   // per capture so each post stage can be isolated/retuned without code forks.
@@ -354,7 +366,10 @@ async function init() {
   //   &vs= vignette strength (display-referred; §5.4 original 0.55 retuned → 0.25
   //        by the p9 measured sweep — 0 = off)
   //   &gs= grain amplitude   (§5.4 default 0.035; 0 = off)
-  // Both post paths consume the SAME five numbers (§5.4 convergence rule).
+  //   &sel= selective bloom  (Phase 12; 1 = emissive-only proxy source [default],
+  //        0 = the p9 whole-scene chain, for A/B attribution)
+  //   &bg= proxy-source gain (Phase 12 calibration; 1 = raw emissive×intensity)
+  // Both post paths consume the SAME numbers (§5.4 convergence rule).
   const postNum = (k: string, d: number) => {
     const s = urlParams.get(k);
     return s === null ? d : parseFloat(s);
@@ -364,8 +379,13 @@ async function init() {
   const bloomRadius = postNum('br', 0.4);
   const vignetteStrength = postNum('vs', 0.25);
   const grainAmount = postNum('gs', 0.035);
+  const selectiveBloomParam = postNum('sel', 1);
 
   if (!skipPost) {
+      selectiveBloom = selectiveBloomParam !== 0;
+      // Phase 12: the proxy pass renders the lamp set from her exact viewpoint.
+      // Pose is re-synced before every post render (prepBloomFrame below).
+      initBloomCamera(camera);
       if (isWebGPU) {
           // WebGPU TSL Post Processing.
           // Phase 9 (J8): the cinematic grade is DISPLAY-referred — tone mapping
@@ -383,8 +403,22 @@ async function init() {
 
           const scenePass = pass( scene, camera );
 
-          // Bloom: §5.4 (0.35, 0.4, 0.85) — levered for the p9 attribution A/Bs
-          const bloomPass = bloom(scenePass, bloomStrength, bloomRadius, bloomThreshold);
+          // Bloom: §5.4 (0.35, 0.4, 0.85) — levered for the p9 attribution A/Bs.
+          // Phase 12 (sel=1 default): the bloom SOURCE is the scene itself via
+          // the sky-masked bloom camera (bloomSources.ts) — lamps, terrain and
+          // props keep their natural §5.4 bloom; the sky dome never enters the
+          // high-pass. sel=0 = the p9 whole-scene source (A/B lever). The halo
+          // is added to the frame in HDR BEFORE renderOutput (same composition
+          // point the WebGL2 mixPass sits at — J8 order).
+          const bloomCamera = getBloomCamera();
+          let bloomInput: any;
+          if (selectiveBloom && bloomCamera) {
+              const skylessPass = pass( scene, bloomCamera );
+              const lampBloom = bloom(skylessPass, bloomStrength, bloomRadius, bloomThreshold);
+              bloomInput = scenePass.add( vec4( lampBloom.rgb, 0 ) );
+          } else {
+              bloomInput = bloom(scenePass, bloomStrength, bloomRadius, bloomThreshold);
+          }
 
           const random = Fn(([p]: [any]) => {
               const K1 = vec2(23.14069263277926, 2.665144142690225);
@@ -424,7 +458,7 @@ async function init() {
 
           postProcessing = new PostProcessingCtor( renderer as WebGPURenderer );
           postProcessing.outputColorTransform = false;
-          postProcessing.outputNode = cinematicNode(bloomPass);
+          postProcessing.outputNode = cinematicNode(bloomInput);
 
       } else {
           // WebGL2 Post Processing — same grade as the WebGPU graph (§5.4).
@@ -444,14 +478,42 @@ async function init() {
           const renderPass = new RenderPass(scene, camera);
           composer.addPass(renderPass);
 
-          // iPhone budget rule: Bloom at half resolution on WebGL2 fallback
-          const bloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
-          const bloomPass = new UnrealBloomPass(bloomRes, bloomStrength, bloomRadius, bloomThreshold);
-          composer.addPass(bloomPass);
-
           // Tone map + encode BEFORE the grade (display-referred grade, J8)
           const outputPass = new OutputPass();
-          composer.addPass(outputPass);
+
+          if (selectiveBloom) {
+              // Phase 12 selective chain: the bloom SOURCE is the lamp-only
+              // proxy scene (bloomSources.ts), kept HDR (no OutputPass here —
+              // its output is added pre-tonemap). mixPass composes base + lamp
+              // bloom at the exact slot UnrealBloomPass's internal blend
+              // occupied pre-p12, so the J8 pass order is unchanged:
+              // bloom (HDR) → OutputPass → CinematicShader.
+              const bloomComposerCtor = EffectComposerCtor;
+              bloomComposer = new bloomComposerCtor(renderer as THREE.WebGLRenderer);
+              const bloomRenderPass = new RenderPass(scene, getBloomCamera()!);
+              bloomComposer.addPass(bloomRenderPass);
+              // iPhone budget rule: Bloom at half resolution on WebGL2 fallback
+              const lampBloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
+              const lampBloomPass = new UnrealBloomPass(lampBloomRes, bloomStrength, bloomRadius, bloomThreshold);
+              bloomComposer.addPass(lampBloomPass);
+
+              // textureID 'baseTexture': ShaderPass feeds the previous pass's
+              // readBuffer into THIS uniform each render (the official
+              // selective-bloom construction — default 'tDiffuse' would leave
+              // the base unbound and the mix black).
+              const mixPass = new ShaderPass(BloomMixShader, 'baseTexture');
+              // UnrealBloomPass composites into readBuffer (needsSwap=false) —
+              // the same texture the official selective-bloom example reads.
+              mixPass.uniforms['bloomTexture'].value = bloomComposer.renderTarget2.texture;
+              composer.addPass(mixPass);
+              composer.addPass(outputPass);
+          } else {
+              // iPhone budget rule: Bloom at half resolution on WebGL2 fallback
+              const bloomRes = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
+              const bloomPass = new UnrealBloomPass(bloomRes, bloomStrength, bloomRadius, bloomThreshold);
+              composer.addPass(bloomPass);
+              composer.addPass(outputPass);
+          }
 
           cinematicPass = new ShaderPass(CinematicShader);
           // Set deterministic time for WebGL2 grain
@@ -462,6 +524,16 @@ async function init() {
       }
   }
   // V-POST: post-processing block end
+
+  // Phase 12: sync the bloom camera (sky-masked) + render the bloom source
+  // composer (WebGL2) before the main post render. No-op cost when selective
+  // bloom is off or skipped. TSL renders the skyless pass inside its graph.
+  function prepBloomFrame(): void {
+      const bc = getBloomCamera();
+      if (!bc) return;
+      syncBloomCamera(camera);
+      if (bloomComposer) bloomComposer.render();
+  }
 
   if (physics.world) {
     // Let's add kinematic body to character
@@ -478,6 +550,8 @@ async function init() {
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    // Phase 12: keep the bloom proxy camera's projection in lockstep.
+    syncBloomCamera(camera);
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
@@ -960,6 +1034,10 @@ async function init() {
       // the east shoulder so the shot frames logs dropping INTO the river.
       character.teleport(16, 2, 20);
       physics.spawnBuoyantDebris(scene, 10);
+      // Phase 12 (p5 flag): buoyancy force-model probe — body state + the
+      // measured water surface under the SAME channel solve (river.ts), for
+      // the float-equilibrium evidence. Shot-mode only, zero play cost.
+      window.__buoyancyProbe = () => physics.probeBodies();
     } else {
       character.teleport(0, 0, 0);
     }
@@ -1121,6 +1199,7 @@ async function init() {
     }
 
     if (!skipPost) {
+       prepBloomFrame();
        if (isWebGPU && postProcessing) {
            postProcessing.render();
        } else if (composer) {
@@ -1133,6 +1212,7 @@ async function init() {
 
   // Initial render
   if (!skipPost) {
+      prepBloomFrame();
       if (isWebGPU && postProcessing) {
           await postProcessing.renderAsync();
       } else if (composer) {
@@ -1158,6 +1238,7 @@ async function init() {
     river.update(tStr ? parseFloat(tStr) : 0);
     // Render once and signal ready
     if (!skipPost) {
+        prepBloomFrame();
         if (isWebGPU && postProcessing) {
             await postProcessing.renderAsync();
         } else if (composer) {
@@ -1184,6 +1265,7 @@ async function init() {
         const rt = new RenderTarget(w, h);
         renderer.setRenderTarget(rt);
         if (!skipPost && postProcessing) {
+          syncBloomCamera(camera);
           postProcessing.render();
         } else {
           await renderer.renderAsync(scene, camera);

@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <link rel="manifest" href="/juzu/manifest.webmanifest" />
+    <!-- P-MOBILE F11: Add-to-Home-Screen launches standalone full-bleed
+         (no Safari chrome) instead of a regular browser tab. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Juzu" />
     <meta name="theme-color" content="#000000" />
     <link rel="apple-touch-icon" href="/juzu/icons/apple-touch-icon.png" />
     <title>Juzu</title>
@@ -12,6 +18,9 @@
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
+        /* P-MOBILE: no gray flash on tap, no long-press callout on iOS. */
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
         margin: 0;
         overflow: hidden;
         overscroll-behavior: none;
