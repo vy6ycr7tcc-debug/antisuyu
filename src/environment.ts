@@ -59,9 +59,17 @@ export const TOD_GRADES: Record<'day'|'dawn'|'noon'|'dusk'|'night', LightRigConf
   },
   dawn: {
     sunColor: 0xFFA500, sunIntensity: 2.2, sunElevationDeg: 6, sunAzimuthDeg: 90,
-    hemiSky: 0xD8C4B0, hemiGround: 0x4A4038, hemiIntensity: 0.25,
-    fillIntensity: 0.35, exposure: 1.0,
-    fogColor: 0xD0B49F, fogDensity: 0.0022, envIntensity: 0.35
+    // P-CANON-2 compensation (plan §P-CANON-2: "compensate in the ToD rigs
+    // with measured hemisphere lift where needed"): the canon albedo regrade
+    // darkened cf humus L49→32 / canopy L83→58, dropping the dawn shadow
+    // floor below the §8.3 gate (cf_dawn crush 9.96% → 25.55%). Hemi lift
+    // 0.25 → 0.50 + ground-bounce lift 0x4A4038 → 0x5A5048 restores the
+    // measured shadow floor while keeping the warm amber sun key (§2.6) and
+    // the low 6° elevation. Dusk row keeps 0.25 (west-sun clip headroom
+    // constraint documented in Phase 2 — dusk clip sits at 0.007% already).
+    hemiSky: 0xD8C4B0, hemiGround: 0x5A5048, hemiIntensity: 0.65,
+    fillIntensity: 0.35, exposure: 1.08,
+    fogColor: 0xD0B49F, fogDensity: 0.0022, envIntensity: 0.50
   },
   noon: {
     sunColor: 0xFFFFFF, sunIntensity: 5.5, sunElevationDeg: 82, sunAzimuthDeg: 180,

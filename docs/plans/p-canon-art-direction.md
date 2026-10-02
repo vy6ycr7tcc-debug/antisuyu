@@ -99,3 +99,25 @@ ruins fog `#6686a2`, ember accent (spark core measured `#baa796`).
   p10/p90 luminance per named region).
 - `docs/art-canon/canon-palette-sheet.png` — swatch contact sheet (hex + L
   per region).
+
+## 6. P-CANON-2 results (branch p-canon-2-albedo)
+
+All regraded anchors verified against the measured bands by
+`scripts/p_canon2_gate_audit.py` (albedo-source audit, ±4 luma):
+**12/12 IN BAND**. §8.3 subset matrix (day/dawn × cf/jungle/paititi/sierra/
+valley @1280 + cf @390, built bundle, WebGL2): **10/10 gated rows PASS**
+(clip 0.000% on all rows; crush worst row 3.94%).
+
+Dawn compensation (plan-predicted risk, measured and applied): cf_dawn
+crush 9.96% → 25.55% after the regrade; fixed with the authorized ToD
+hemisphere lift (dawn hemiIntensity 0.25 → 0.65, hemiGround 0x4A4038 →
+0x5A5048, exposure 1.0 → 1.08, envIntensity 0.35 → 0.50; sun key/elevation
+untouched). Post-compensation sweep measured: 25.55 → 3.94% (1280),
+24.74 → 1.68% (390). Side effect: valley_dawn (phase-4 XFAIL, 15.42%)
+now measures 0.04% — the lift retired that XFAIL. paititi_dawn remains
+XFAIL (54.20% → 23.30%, dome self-shadow physics — separate deferred fix).
+Dusk row untouched (west-sun clip headroom constraint, Phase 2).
+
+Deferred (unchanged scope): sierra granite row 0x6E6A63 + plaster band
+audit; trim-band redesign + plank/rope material (P-CANON-3); god rays /
+ember VFX (P-CANON-4); character palette (P-CANON-5).
