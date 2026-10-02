@@ -5,6 +5,7 @@ export class MenuManager {
 
   // Callbacks
   public onResume?: () => void;
+  public onPause?: () => void;  // P-MOBILE: touch pause button + input release hook
   public onQuit?: () => void;
 
   constructor(parent: HTMLElement) {
@@ -83,9 +84,7 @@ export class MenuManager {
     this.isOpen = true;
     this.overlay.classList.remove('hidden');
     this.overlay.classList.add('visible');
-    if (this.onResume) { // Actually maybe we don't call onResume here, we're pausing
-       // trigger pause event to engine if needed
-    }
+    if (this.onPause) this.onPause();
   }
 
   public close() {

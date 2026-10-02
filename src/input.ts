@@ -1,6 +1,10 @@
 export class InputManager {
   public keys: Record<string, boolean> = {};
   public joystickVector: { x: number; y: number } = { x: 0, y: 0 };
+  // Analog magnitude (0..1) of the virtual stick — P-MOBILE F3: the
+  // character controller maps this onto the walk→run band (full deflection
+  // sustains run speed). Keyboard input keeps magnitude implicit (1).
+  public joystickMagnitude: number = 0;
   public cameraDelta: { x: number; y: number } = { x: 0, y: 0 };
   public tap: boolean = false;
   public hold: boolean = false;
@@ -24,10 +28,27 @@ export class InputManager {
       }
       this.previousMousePosition = { x: e.clientX, y: e.clientY };
     });
+
+    // P-MOBILE F7: an app switch must never leave a key latched down
+    // (the character kept walking after returning to the tab).
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.keys = {};
+    });
   }
 
   isDown(code: string): boolean {
     return !!this.keys[code];
+  }
+
+  // P-MOBILE F7: full input wipe (used alongside TouchControls.releaseAll
+  // when the tab hides or the pause menu opens).
+  clear(): void {
+    this.keys = {};
+    this.joystickVector = { x: 0, y: 0 };
+    this.joystickMagnitude = 0;
+    this.cameraDelta = { x: 0, y: 0 };
+    this.tap = false;
+    this.hold = false;
   }
 
   getJoystickVector(): { x: number; y: number } {
@@ -56,4 +77,13 @@ export class InputManager {
     }
     return false;
   }
+}
+
+// P-MOBILE: touch-capable device probe (coarse primary pointer or real
+// touchstart surface). Drives the mobile default quality tier (renderer.ts)
+// and whether the touch UI layer mounts (main.ts). `&touch=1` bypasses this
+// for desktop verification captures.
+export function isTouchLikeDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 }

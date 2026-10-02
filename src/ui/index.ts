@@ -6,12 +6,17 @@ import { TitleScreenManager } from './title.js';
 import { CharacterController } from '../character.js';
 
 export class UIManager {
-  private root: HTMLElement;
+  public root: HTMLElement;
   public state: UIEngineState;
 
   public hud: HUDManager;
   public menu: MenuManager;
   public title: TitleScreenManager;
+
+  // Called after the journey actually starts (title → New Journey). P-MOBILE
+  // uses this to mount the touch HUD (pause button) and acquire wake lock
+  // inside the user gesture.
+  public onJourneyStart?: () => void;
 
   // Bindings
   private characterController: CharacterController | null = null;
@@ -33,6 +38,7 @@ export class UIManager {
     // Setup logic
     this.title.onStart = () => {
       this.hud.setVisible(true);
+      if (this.onJourneyStart) this.onJourneyStart();
     };
 
     this.title.onSettings = () => {

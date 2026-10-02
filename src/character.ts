@@ -5,6 +5,21 @@ import { physics } from './physics.js';
 import { getGlobalTerrainHeight } from './terrain.js';
 import { skinNaira, clothField, hairDark, leatherDark } from './materials.js';
 
+// P-MOBILE verification hook (docs/plans/phase-5-mobile-controls.md §P5.3):
+// gates G3/G4 read live locomotion state instead of screenshot guessing.
+declare global {
+  interface Window {
+    __playerDebug?: {
+      theta: number;
+      phi: number;
+      speed: number;
+      state: MovementState;
+      x: number;
+      z: number;
+    };
+  }
+}
+
 export enum MovementState {
   WALK = 'WALK',
   CLIMB = 'CLIMB',
@@ -205,16 +220,15 @@ export class CharacterController {
     }
 
     // Movement Input
+    const joy = this.input.getJoystickVector();
+    const joystickActive = joy.x !== 0 || joy.y !== 0;
     let forward = this.input.isDown('KeyW') ? 1 : (this.input.isDown('KeyS') ? -1 : 0);
     let right = this.input.isDown('KeyD') ? 1 : (this.input.isDown('KeyA') ? -1 : 0);
 
     // touch-controls: Inject analog joystick input
-    if (typeof this.input.getJoystickVector === 'function') {
-      const joy = this.input.getJoystickVector();
-      if (joy.x !== 0 || joy.y !== 0) {
-        forward = -joy.y;
-        right = joy.x;
-      }
+    if (joystickActive) {
+      forward = -joy.y;
+      right = joy.x;
     }
 
     const isRunning = this.input.isDown('ShiftLeft');
@@ -258,7 +272,17 @@ export class CharacterController {
 
       this.mesh.rotation.y += angleDiff * this.rotationSpeed * dt;
 
-      const targetSpeed = isRunning ? this.maxRunSpeed : this.maxWalkSpeed;
+      // P-MOBILE F3: analog walk→run blend from stick deflection. Keyboard
+      // keeps the Shift sprint; on touch, full sustained deflection IS the
+      // sprint (magnitude ≥ 0.95 → maxRunSpeed). t² eases fine control near
+      // the stick center; half deflection stays inside the walk band.
+      let targetSpeed: number;
+      if (joystickActive) {
+        const t = THREE.MathUtils.clamp((this.input.joystickMagnitude - 0.35) / (0.95 - 0.35), 0, 1);
+        targetSpeed = this.maxWalkSpeed + (this.maxRunSpeed - this.maxWalkSpeed) * t * t;
+      } else {
+        targetSpeed = isRunning ? this.maxRunSpeed : this.maxWalkSpeed;
+      }
       this.speed = Math.min(targetSpeed, this.speed + this.acceleration * dt);
 
     } else {
@@ -391,6 +415,15 @@ export class CharacterController {
       this.rightArm.rotation.x = THREE.MathUtils.lerp(this.rightArm.rotation.x, 0, dt * 10);
       this.torso.position.y = THREE.MathUtils.lerp(this.torso.position.y, 1.0, dt * 10);
     }
+
+    window.__playerDebug = {
+      theta: this.theta,
+      phi: this.phi,
+      speed: this.speed,
+      state: this.state,
+      x: this.mesh.position.x,
+      z: this.mesh.position.z,
+    };
 
     this.updateCamera();
   }
