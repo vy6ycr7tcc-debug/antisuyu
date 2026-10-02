@@ -10,7 +10,12 @@ export interface RendererQuality {
 
 export const QUALITY_TIERS: Record<'HIGH' | 'MEDIUM' | 'LOW', RendererQuality> = {
   HIGH: { tier: 'HIGH', shadowMapSize: 2048, pixelRatio: Math.min(2, window.devicePixelRatio) },
-  MEDIUM: { tier: 'MEDIUM', shadowMapSize: 1024, pixelRatio: Math.min(1.5, window.devicePixelRatio) },
+  // P-MOBILE-Q: MEDIUM keeps 2.0 DPR — the downshift penalty is shadow-map
+  // resolution only. The old 1.5 cap made governor-downshifted phones render
+  // visibly sub-native on 3× Retina (soft upscale), which read as "blurry
+  // graphics". Foliage/geometry density is identical across HIGH/MEDIUM
+  // (§6.3 only halves LOW).
+  MEDIUM: { tier: 'MEDIUM', shadowMapSize: 1024, pixelRatio: Math.min(2, window.devicePixelRatio) },
   LOW: { tier: 'LOW', shadowMapSize: 512, pixelRatio: 1.0 }, // shadow map size adjusted dynamically in renderer for WebGPU
 };
 
@@ -126,12 +131,13 @@ export const CinematicShader = {
 export async function createRenderer(): Promise<{ renderer: WebGPURenderer | THREE.WebGLRenderer, quality: RendererQuality }> {
   // Determine quality tier based on device/fps... simplified for now
   let quality = navigator.hardwareConcurrency > 4 ? QUALITY_TIERS.HIGH : QUALITY_TIERS.MEDIUM;
-  // P-MOBILE F9: touch devices start at MEDIUM — iPhones report 6 cores,
-  // which picked HIGH @ pixelRatio min(2, dpr 3): a 780×1688 render from
-  // frame one that the adaptive governor then yanked down 3 s in (visible
-  // stutter). MEDIUM can still climb via the governor. `?quality=` override
-  // below is untouched.
-  if (isTouchLikeDevice()) quality = QUALITY_TIERS.MEDIUM;
+  // P-MOBILE F9 (amended by P-MOBILE-Q): touch devices start at HIGH.
+  // The original MEDIUM start was calibrated against the headless SwiftShader
+  // sandbox where HIGH @ 2× DPR ran ~1 fps; a real iPhone GPU handles 2× at
+  // 60 fps on this scene. The adaptive governor (3 s < 25 fps → downshift)
+  // remains the safety net for older devices — and with MEDIUM now holding
+  // 2.0 DPR, a downshift no longer blurs the image, it only softens shadows.
+  if (isTouchLikeDevice()) quality = QUALITY_TIERS.HIGH;
 
   const urlParams = new URLSearchParams(window.location.search);
   const qParam = urlParams.get('quality');
