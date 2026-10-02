@@ -10,6 +10,7 @@ import {
   type TrimSheetMaps
 } from './textures.js';
 import type { MeshStandardNodeMaterial } from 'three/webgpu';
+import type { RenderCaps } from './renderer.js';
 
 // ============================================================================
 // V-MAT — the shared material library (visual bible §4.2 / §7.4).
@@ -18,10 +19,12 @@ import type { MeshStandardNodeMaterial } from 'three/webgpu';
 // All parameter values live inside the §4.1 PBR ranges; §2 palette hexes are
 // the albedo defaults. No caller may set `.emissive` except via lampEmissive()
 // (§4.4 anti-glow law). This module imports textures only from textures.ts;
-// it never imports renderer state.
+// it never imports renderer STATE — RenderCaps below is the canonical §7.2
+// TYPE from renderer.ts, re-exported for consumers (the p2-flagged duplicate
+// declaration is gone; single source of truth).
 // ============================================================================
 
-export interface RenderCaps { isWebGPU: boolean; tier: 'HIGH' | 'MEDIUM' | 'LOW'; maxAnisotropy: number; }
+export type { RenderCaps };
 
 // --- shared texture caches ----------------------------------------------------
 // Procedural textures are generated once and shared across every material
@@ -325,6 +328,85 @@ export function caveDark(): THREE.MeshStandardMaterial {
         normalMap: getNormalMap(),
         roughnessMap: getNoiseMap(),
         envMapIntensity: 0.3,
+    });
+}
+
+// ============================================================================
+// V-REG1 dressing factories (§2.2 cloud forest / §2.3 high sierra palette)
+// The region dressing pass consumes these instead of recolor-hacking stone
+// factories (the p10 audit found the pit read as ashlar, not raw earth).
+// ============================================================================
+
+// Humus/earth (§2.2: ground, excavation pit) — raw wet earth
+export function humusEarth(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x3B2E22,
+        roughness: 0.95,
+        metalness: 0.0,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
+
+// Moss (§2.2: stone/wood moss patches) — roughness 0.95 per palette row
+export function mossPatch(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x5A7247,
+        roughness: 0.95,
+        metalness: 0.0,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
+
+// Lichen (§2.3: lichen patches on rock #7A8A5A) — roughness 1.0 per palette row
+export function lichenPatch(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x7A8A5A,
+        roughness: 1.0,
+        metalness: 0.0,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
+
+// Broadleaf card (§2.2 canopy greens #2D4A22 / #3E5E2A) — foliage card read,
+// two-sided because cards are flat planes seen from both sides (V-FOLIAGE style)
+export function broadleafCard(hex: number = 0x3E5E2A): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: hex,
+        roughness: 0.8,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
+}
+
+// Orchid accent (§2.2 #C9A0DC, sparse clusters, ≤2% of frame) — no emissive (§4)
+export function orchidAccent(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0xC9A0DC,
+        roughness: 0.6,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+        envMapIntensity: 1.0,
+    });
+}
+
+// Terracotta (§2.3: village roofs, pottery shards #A85B32) — fired clay
+export function terracotta(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0xA85B32,
+        roughness: 0.8,
+        metalness: 0.0,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
     });
 }
 

@@ -1,0 +1,9 @@
+[
+  { "name": "hs_overview_day",      "url": "shot=region:hs_overview" },
+  { "name": "hs_overview_dawn",     "url": "shot=region:hs_overview&tod=dawn" },
+  { "name": "hs_sayhuite_day",      "url": "shot=region:hs_sayhuite_table" },
+  { "name": "hs_qenko_day",         "url": "shot=region:hs_qenko_marker" },
+  { "name": "hs_paqarina_dawn",     "url": "shot=region:hs_paqarina_descent&tod=dawn" },
+  { "name": "hs_overview_390",      "url": "shot=region:hs_overview", "w": 390, "h": 844 },
+  { "name": "hs_det_repeat",        "url": "shot=region:hs_overview" }
+]

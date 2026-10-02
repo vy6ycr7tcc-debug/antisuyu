@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ashlarLight, gold, bronze, ashlarWeathered, type RenderCaps } from '../materials.js';
+import { ashlarLight, gold, bronze, plazaWorn, type RenderCaps } from '../materials.js';
 import { createWaterSurface } from '../river.js';
 import type {
   RegionModule,
@@ -70,11 +70,16 @@ export const paititi: RegionModule = {
     { flag: 'q_act4_observatory_aligned', trigger: 'pa_grand_observatory' }
   ],
   shots: [
-    { id: 'pa_overview', camera: { x: 1000, y: 150, z: -200 }, lookAt: { x: 1100, y: 0, z: -50 } },
-    { id: 'pa_outer_terraces', camera: { x: 800, y: 50, z: -100 }, lookAt: { x: 900, y: 0, z: -100 } },
-    { id: 'pa_plaza_of_sun', camera: { x: 1050, y: 20, z: -50 }, lookAt: { x: 1100, y: 10, z: -50 } },
-    { id: 'pa_sanctuary', camera: { x: 1250, y: 20, z: 50 }, lookAt: { x: 1300, y: 15, z: 50 } },
-    { id: 'pa_aqueduct_line', camera: { x: 1150, y: 20, z: 0 }, lookAt: { x: 1200, y: 10, z: 0 } }
+    // p11 defect ⑥: these camera/lookAt heights were authored as if the
+    // paititi plateau were at y≈0–100; the actual terrain samples 253–688 m
+    // (probe: scripts/p11_height_probe.cjs). Every pa_ shot rendered
+    // underground — a pure fog frame — since the shot table landed. Heights
+    // re-anchored to the measured terrain (camera = terrain + 25–45 m).
+    { id: 'pa_overview', camera: { x: 1000, y: 440, z: -200 }, lookAt: { x: 1100, y: 490, z: -50 } },
+    { id: 'pa_outer_terraces', camera: { x: 800, y: 278, z: -100 }, lookAt: { x: 900, y: 345, z: -100 } },
+    { id: 'pa_plaza_of_sun', camera: { x: 1050, y: 492, z: -50 }, lookAt: { x: 1100, y: 485, z: -50 } },
+    { id: 'pa_sanctuary', camera: { x: 1250, y: 700, z: 50 }, lookAt: { x: 1300, y: 695, z: 50 } },
+    { id: 'pa_aqueduct_line', camera: { x: 1150, y: 578, z: 0 }, lookAt: { x: 1200, y: 572, z: 0 } }
   ],
   build(api: RegionBuildAPI) {
     const paititiGroup = new THREE.Group();
@@ -84,6 +89,9 @@ export const paititi: RegionModule = {
     const stoneMaterial = ashlarLight();
     const goldMaterial = gold();
     const bronzeMaterial = bronze();
+    const pavingMaterial = plazaWorn(); // §2.5 Plaza stone #9A917E, worn
+    const greenMaterial = ashlarLight();
+    greenMaterial.color.setHex(0x2E5A2E); // §2.5 encroaching green (per-instance recolor)
 
     const caps: RenderCaps = {
       isWebGPU: typeof navigator !== 'undefined' && !!(navigator as unknown as { gpu?: unknown }).gpu,
@@ -117,12 +125,56 @@ export const paititi: RegionModule = {
     const plazaGroup = new THREE.Group();
     
     const plazaGeo = new THREE.CylinderGeometry(40, 45, 2, 64);
-    const plazaMesh = new THREE.Mesh(plazaGeo, stoneMaterial);
+    const plazaMesh = new THREE.Mesh(plazaGeo, pavingMaterial);
     plazaMesh.position.set(plazaCenter.x, plazaHeight, plazaCenter.z);
     plazaMesh.receiveShadow = true;
     plazaGroup.add(plazaMesh);
 
-    // The Punchao (Golden Disk)
+    // §2.5 plaza dais — three stepped courses under the Punchao (the p3-flagged
+    // "plaza flats" read: a bare disk floating over an empty slab)
+    const daisRadii = [16, 12.5, 9];
+    const daisHeights = [0.7, 0.65, 0.6];
+    let daisY = plazaHeight + 1;
+    for (let i = 0; i < 3; i++) {
+      const course = new THREE.Mesh(
+        new THREE.CylinderGeometry(daisRadii[i], daisRadii[i] + 0.6, daisHeights[i], 48),
+        stoneMaterial
+      );
+      course.position.set(plazaCenter.x, daisY + daisHeights[i] / 2, plazaCenter.z);
+      course.castShadow = true;
+      course.receiveShadow = true;
+      plazaGroup.add(course);
+      daisY += daisHeights[i];
+    }
+
+    // §2.5 pillar colonnade ring (civic scale: ≥ 3× Naira's 1.8 m → 7 m shafts)
+    const colonnadeGeo = new THREE.CylinderGeometry(0.9, 1.05, 7, 12);
+    const capGeo = new THREE.BoxGeometry(2.4, 0.5, 2.4);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const px = plazaCenter.x + Math.cos(a) * 30;
+      const pz = plazaCenter.z + Math.sin(a) * 30;
+      const shaft = new THREE.Mesh(colonnadeGeo, stoneMaterial);
+      shaft.position.set(px, plazaHeight + 4.5, pz);
+      shaft.castShadow = true;
+      const cap = new THREE.Mesh(capGeo, stoneMaterial);
+      cap.position.set(px, plazaHeight + 8.2, pz);
+      cap.rotation.y = a;
+      cap.castShadow = true;
+      plazaGroup.add(shaft, cap);
+    }
+
+    // §2.5 encroaching green — vegetation at the city's EDGES only (the city
+    // itself is maintained stone). Low mounds + fringe cards on the rim.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + 0.3;
+      const mound = new THREE.Mesh(new THREE.SphereGeometry(2 + (i % 3), 8, 6), greenMaterial);
+      mound.position.set(plazaCenter.x + Math.cos(a) * 43, plazaHeight - 0.5, plazaCenter.z + Math.sin(a) * 48);
+      mound.scale.y = 0.45;
+      plazaGroup.add(mound);
+    }
+
+    // The Punchao (Golden Disk) — seated above the dais it now crowns
     const diskGeo = new THREE.CylinderGeometry(10, 10, 0.5, 32);
     const diskMesh = new THREE.Mesh(diskGeo, goldMaterial);
     diskMesh.position.set(plazaCenter.x, plazaHeight + 10, plazaCenter.z);
@@ -259,8 +311,8 @@ export const paititi: RegionModule = {
           const blink = timerCount % 2 === 0;
 
           charges.forEach(c => {
-            if (c.material instanceof THREE.Material && 'color' in c.material) {
-              (c.material as any).color.setHex(blink ? 0xff0000 : 0x330000);
+            if (c.material instanceof THREE.MeshStandardMaterial) {
+              c.material.color.setHex(blink ? 0xff0000 : 0x330000);
             }
           });
 

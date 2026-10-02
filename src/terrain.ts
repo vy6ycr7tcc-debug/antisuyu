@@ -287,6 +287,100 @@ export class TerrainManager {
 
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
+    // LOD T-junction skirts (p3/p4/p5/p8-flagged chunk-edge crack + sun-bleed
+    // fix). Adjacent chunks load at different segment densities (64/16/4);
+    // their shared edges sample the height function at different points, so
+    // T-junction cracks open and the sky/bleed shows through. Each edge gets
+    // a vertical strip of duplicated vertices lowered by SKIRT_DEPTH, carrying
+    // the edge color/normal/uv so the band reads as terrain inside the gaps.
+    // The trimesh collider picks the skirt up too (vertical walls at chunk
+    // edges — harmless, closes the same holes for physics).
+    const SKIRT_DEPTH = 14;
+    {
+      const gridN = segments + 1;
+      const baseVerts = position.count;
+      const grid = geometry.attributes.position as THREE.BufferAttribute;
+      const nor0 = geometry.attributes.normal as THREE.BufferAttribute;
+      const col0 = geometry.attributes.color as THREE.BufferAttribute;
+      const uv0 = geometry.attributes.uv as THREE.BufferAttribute;
+
+      // Edge vertex lists: north (r=0), south (r=gridN-1), west (c=0), east (c=gridN-1)
+      const edgeIdx: number[] = [];
+      for (let c = 0; c < gridN; c++) edgeIdx.push(c);
+      for (let c = 0; c < gridN; c++) edgeIdx.push((gridN - 1) * gridN + c);
+      for (let r = 0; r < gridN; r++) edgeIdx.push(r * gridN);
+      for (let r = 0; r < gridN; r++) edgeIdx.push(r * gridN + gridN - 1);
+
+      const skirtVerts = edgeIdx.length;
+      const newPos = new Float32Array((baseVerts + skirtVerts) * 3);
+      const newNor = new Float32Array((baseVerts + skirtVerts) * 3);
+      const newCol = new Float32Array((baseVerts + skirtVerts) * 3);
+      const newUv = new Float32Array((baseVerts + skirtVerts) * 2);
+      newPos.set(grid.array as Float32Array);
+      newNor.set(nor0.array as Float32Array);
+      newCol.set(col0.array as Float32Array);
+      newUv.set(uv0.array as Float32Array);
+      for (let k = 0; k < skirtVerts; k++) {
+        const src = edgeIdx[k];
+        const dst = baseVerts + k;
+        newPos[dst * 3 + 0] = grid.getX(src);
+        newPos[dst * 3 + 1] = grid.getY(src) - SKIRT_DEPTH;
+        newPos[dst * 3 + 2] = grid.getZ(src);
+        newNor[dst * 3 + 0] = nor0.getX(src);
+        newNor[dst * 3 + 1] = nor0.getY(src);
+        newNor[dst * 3 + 2] = nor0.getZ(src);
+        newCol[dst * 3 + 0] = col0.getX(src);
+        newCol[dst * 3 + 1] = col0.getY(src);
+        newCol[dst * 3 + 2] = col0.getZ(src);
+        newUv[dst * 2 + 0] = uv0.getX(src);
+        newUv[dst * 2 + 1] = uv0.getY(src);
+      }
+
+      const oldIndex = geometry.index!;
+      const quads = 4 * (gridN - 1);
+      const newIndex = new Uint32Array(oldIndex.count + quads * 6);
+      newIndex.set(oldIndex.array as Uint32Array);
+      let w = oldIndex.count;
+      for (let e = 0; e < 4; e++) {
+        for (let c = 0; c < gridN - 1; c++) {
+          const t0 = edgeIdx[e * gridN + c];          // top edge vertex A
+          const t1 = edgeIdx[e * gridN + c + 1];      // top edge vertex B
+          const b0 = baseVerts + e * gridN + c;       // lowered A
+          const b1 = baseVerts + e * gridN + c + 1;   // lowered B
+          // Orientation: the outward horizontal direction for this edge,
+          // computed from the quad midpoint to the chunk center (0,0).
+          const mx = (grid.getX(t0) + grid.getX(t1)) / 2;
+          const mz = (grid.getZ(t0) + grid.getZ(t1)) / 2;
+          let len = Math.hypot(mx, mz) || 1;
+          const ox = mx / len, oz = mz / len;
+          // Triangle (t0, t1, b0): face normal via cross((t1-t0),(b0-t0)).
+          const ax = grid.getX(t1) - grid.getX(t0);
+          const ay = grid.getY(t1) - grid.getY(t0);
+          const az = grid.getZ(t1) - grid.getZ(t0);
+          const bx = grid.getX(b0) - grid.getX(t0);
+          const by = grid.getY(b0) - grid.getY(t0);
+          const bz = grid.getZ(b0) - grid.getZ(t0);
+          const nx = ay * bz - az * by;
+          const ny = az * bx - ax * bz;
+          const nz = ax * by - ay * bx;
+          const outward = nx * ox + ny * 0 + nz * oz;
+          if (outward >= 0) {
+            newIndex.set([t0, t1, b0, t1, b1, b0], w);
+          } else {
+            newIndex.set([t0, b0, t1, t1, b0, b1], w);
+          }
+          w += 6;
+        }
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(newPos, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(newNor, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(newCol, 3));
+      geometry.setAttribute('uv', new THREE.BufferAttribute(newUv, 2));
+      geometry.setIndex(new THREE.BufferAttribute(newIndex, 1));
+      geometry.computeBoundingSphere();
+    }
+
     const chunk = new THREE.Mesh(geometry, this.material);
     chunk.position.set(worldOffsetX, 0, worldOffsetZ);
     chunk.receiveShadow = true;
