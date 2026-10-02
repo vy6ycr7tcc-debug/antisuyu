@@ -404,7 +404,11 @@ async function init() {
       terrainHeight: getGlobalTerrainHeight,
       onEnterRegion: (cb: () => void) => regionManager.registerEnterCallback(region.id, cb),
       onExitRegion: (cb: () => void) => regionManager.registerExitCallback(region.id, cb),
-      resolveEncounter: (id: string) => regionManager.resolveEncounter(id)
+      resolveEncounter: (id: string) => regionManager.resolveEncounter(id),
+      // P-MOBILE: region rAF tick chains must freeze with the sim (see
+      // RegionBuildAPI.isSimPaused) — pause now halts the main loop, so any
+      // region timer that kept counting would desync from the frozen world.
+      isSimPaused: () => isPaused
     };
     try {
       region.build(api);

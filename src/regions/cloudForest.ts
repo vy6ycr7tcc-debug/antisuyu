@@ -396,6 +396,14 @@ export const cloudForest: RegionModule = {
       const checkLogic = () => {
         if (!loopActive) return;
 
+        // P-MOBILE: keep the poll alive but frozen under the pause menu —
+        // the solve path (flags.set + door animation) must not be able to
+        // start while the sim is halted.
+        if (api.isSimPaused()) {
+          requestAnimationFrame(checkLogic);
+          return;
+        }
+
         // The actual player interaction needs to be mocked or we can just
         // implement the state machine ready for an input system.
         // We don't have direct access to the character's position here easily
