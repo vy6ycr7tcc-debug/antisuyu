@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-10-02T06:21:19.260Z",
-  "url": "http://localhost:3000/juzu/?touch=1&turbo=1",
+  "timestamp": "2026-10-02T21:29:51.572Z",
+  "url": "http://127.0.0.1:3000/juzu/?touch=1&turbo=1",
   "viewport": "390x844@1x touch (iPhone 14 geometry), WebGL2 SwiftShader headless",
   "gates": [
     {
@@ -8,7 +8,7 @@
       "pass": true,
       "detail": {
         "revealedWithinFrames": 1,
-        "wallMs": 4720,
+        "wallMs": 11274,
         "criterion": "menu list reveals within 8 rendered frames of the tap (frame-synced; wall clock inflated only by SwiftShader)"
       }
     },
@@ -38,7 +38,7 @@
           }
         ],
         "fullDeflection": {
-          "maxDisplacement_m": 8.71,
+          "maxDisplacement_m": 3.71,
           "maxSpeed": 5
         },
         "halfDeflection": {
@@ -73,13 +73,13 @@
       "name": "G7_tier_governor",
       "pass": true,
       "detail": {
-        "tierStart": "MEDIUM",
-        "tierEnd": "MEDIUM",
+        "tierStart": "HIGH",
+        "tierEnd": "HIGH",
         "tierSeries": [
-          "MEDIUM"
+          "HIGH"
         ],
-        "headlessFpsMean": 0.9,
-        "criterion": "touch device starts at MEDIUM (F9); governor series recorded as evidence — SwiftShader fps is not an on-device claim"
+        "headlessFpsMean": 0.5,
+        "criterion": "touch device starts at HIGH (F9 as amended by P-MOBILE-Q); governor series recorded as evidence — SwiftShader fps is not an on-device claim"
       }
     },
     {
@@ -122,20 +122,20 @@
     }
   ],
   "fpsSeries": [
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9,
-    0.9
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5,
+    0.5
   ]
 }

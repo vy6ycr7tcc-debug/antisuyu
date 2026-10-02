@@ -185,10 +185,14 @@ export class TerrainManager {
     // code allocated 6+ Colors per vertex. Weights blend smoothly across
     // 60 m transition bands instead of the old hard biome switches, which
     // drew visible color seams across the terrain.
+    // P-CANON-2: albedos regraded to the owner-canon measured bands
+    // (docs/art-canon/canon-palette.json — luma: humus 27–39, foliage 55–62,
+    // moss ≈55, granite ≈60). Sierra row untouched (no canon tileable; own
+    // audit later). WET riverbank darkening target already in canon range.
     const CF = {
-      rock: new THREE.Color(0x5A5A58),   // wet stone
-      soilA: new THREE.Color(0x3B2E22),  // humus/earth
-      soilB: new THREE.Color(0x3E5E2A)   // canopy green tint
+      rock: new THREE.Color(0x3d3c37),   // wet stone — dark granite band (canon stonework)
+      soilA: new THREE.Color(0x26200f),  // humus/earth — canon humus 0x191e08 ↔ litter 0x31261f blend (L≈32)
+      soilB: new THREE.Color(0x303f24)   // canopy green tint — foliage band (L≈58)
     };
     const HS = {
       rock: new THREE.Color(0x6E6A63),   // granite
@@ -199,14 +203,14 @@ export class TerrainManager {
       snowShadow: new THREE.Color(0xC9D6E2) // never pure grey in shadow
     };
     const JL = {
-      rock: new THREE.Color(0xB8B0A0),   // swallowed limestone
-      moss: new THREE.Color(0x5A7247),   // heavy moss reclamation
-      soil: new THREE.Color(0x4A3826)    // mud
+      rock: new THREE.Color(0x3d3c37),   // swallowed limestone — granite band (was L≈152)
+      moss: new THREE.Color(0x2c3e15),   // heavy moss reclamation — canon moss anchor (was L≈107)
+      soil: new THREE.Color(0x2a2313)    // mud — same floor-albedo family as cf soilA (L≈35)
     };
     const PA = {
-      rockA: new THREE.Color(0x9A917E),  // plaza stone
-      rockB: new THREE.Color(0xA89E86),  // ashlar shadow
-      soil: new THREE.Color(0x2E5A2E)    // encroaching green
+      rockA: new THREE.Color(0x403c37),  // plaza stone — granite band upper (was L≈145)
+      rockB: new THREE.Color(0x34322e),  // ashlar shadow — darker than rockA (was L≈158)
+      soil: new THREE.Color(0x2c3e15)    // encroaching green — canon moss anchor (was L≈78)
     };
     const WET = new THREE.Color(0x2E2A24); // riverbank darkening target
     const color = new THREE.Color();

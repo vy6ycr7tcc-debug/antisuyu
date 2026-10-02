@@ -108,7 +108,7 @@ export const cloudForest: RegionModule = {
     const metalMat = ironDark();
     const emissiveMat = lampEmissive();
     const mossMat = mossPatch();
-    const leafLitMat = broadleafCard(0x3E5E2A);
+    const leafLitMat = broadleafCard(0x303f24);
     const leafShadowMat = broadleafCard(0x2D4A22);
     const orchidMat = orchidAccent();
 

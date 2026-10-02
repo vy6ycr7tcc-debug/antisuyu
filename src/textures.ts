@@ -115,11 +115,14 @@ const BAND_PROFILES: BandProfile[] = [
   { cols: 0, rows: 0, jointDepth: 0.00, jointWidthPx: 0, relief: 0.0, flatness: 0.95, roughBase: 0.85, jitter: 0.02 }  // plaster
 ];
 
-// §2 palette anchors. Ashlar limestone #B5A98F is the default stone albedo;
-// grime/moisture and moss modify it inside the sheet (never a green wash).
-const STONE_BASE = { r: 0xB5, g: 0xA9, b: 0x8F };
+// P-CANON-2: palette anchors regraded to the owner-canon measured bands
+// (docs/art-canon/canon-palette.json): stone = dark granite #3c3b37–#403c37
+// (was ashlar limestone #B5A98F, L≈169 vs canon ≈60); moss = canon anchor
+// #2c3e15 (L≈55). Grime/moisture and moss modify the base inside the sheet
+// (never a green wash). Plaster re-audit deferred (no canon conviction yet).
+const STONE_BASE = { r: 0x3D, g: 0x3C, b: 0x37 };
 const PLASTER_BASE = { r: 0xC9, g: 0xBD, b: 0xA4 };
-const MOSS_TINT = { r: 0x5A, g: 0x72, b: 0x47 }; // §4.3.4 moss anchor
+const MOSS_TINT = { r: 0x2C, g: 0x3E, b: 0x15 }; // canon moss anchor
 
 export function createAshlarTrimSheet(size: number = 1536): TrimSheetMaps {
   const W = size;
