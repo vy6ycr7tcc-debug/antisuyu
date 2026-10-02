@@ -27,11 +27,20 @@ export class TitleScreenManager {
     const pressAnyKey = this.overlay.querySelector('#press-to-begin') as HTMLElement;
     const menuList = this.overlay.querySelector('#title-menu-list') as HTMLElement;
 
+    // P-MOBILE F1: the title gate now answers pointerdown — iOS Safari never
+    // delivers the synthetic click this screen used to rely on (TouchControls
+    // suppresses non-UI touchstart defaults). Dedupe: first event wins and
+    // removes both listeners.
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      pressAnyKey.textContent = 'TAP TO BEGIN';
+    }
+
     const handleInitialInput = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
       window.removeEventListener('keydown', handleInitialInput, true);
       window.removeEventListener('click', handleInitialInput, true);
+      window.removeEventListener('pointerdown', handleInitialInput, true);
 
       pressAnyKey.style.display = 'none';
       menuList.style.display = 'flex';
@@ -39,6 +48,7 @@ export class TitleScreenManager {
 
     window.addEventListener('keydown', handleInitialInput, true);
     window.addEventListener('click', handleInitialInput, true);
+    window.addEventListener('pointerdown', handleInitialInput, true);
 
     this.overlay.querySelector('#btn-new-journey')?.addEventListener('click', () => {
       this.close();
