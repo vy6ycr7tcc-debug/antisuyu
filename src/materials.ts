@@ -513,7 +513,10 @@ export function fabricWorn(hex: number): THREE.MeshStandardMaterial {
 // the other organic factories use; §4.1 "roughness story" at pack/strap scale)
 export function leatherDark(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-        color: 0x2C1A10,
+        // P-CANON-5 (albedo-source audit p13): harness/pack leather regraded to
+        // the concept-character measured band (canon-palette.json
+        // concept-character.harness_leather median #33261d; was 0x2C1A10).
+        color: 0x33261D,
         roughness: 0.75,
         metalness: 0.05,
         normalMap: getNormalMap(),
@@ -645,6 +648,9 @@ export function skinNaira(): THREE.MeshPhysicalMaterial {
 
 // Cloth Field — §4.1 cloth roughness 0.9–1.0, "weather-worn, never clean"
 // (§1.2 Tomb Raider row). p7 audit fixes:
+// P-CANON-5 (p13): jacket regraded to the concept-character measured band
+// (canon-palette.json concept-character.jacket median #1a1a18; was 0x4A5D23,
+// luma 81 vs canon 25.8 — the bright "toy soldier" green the owner flagged).
 //  - roughnessMap WAS GENERATED BUT NEVER WIRED: weave map (mean ~0.86,
 //    thread-crest polish lows 0.80) × base 1.08 → effective 0.86–1.0 — the
 //    crest sheen IS the wear story.
@@ -653,7 +659,7 @@ export function skinNaira(): THREE.MeshPhysicalMaterial {
 //    the interference.
 export function clothField(): THREE.MeshPhysicalMaterial {
     const mat = new THREE.MeshPhysicalMaterial({
-        color: 0x4A5D23,          // field-jacket olive (§2 quipu-dye family)
+        color: 0x1A1A18,          // canon jacket charcoal (concept-character.jacket)
         roughness: 1.08,          // × weave map (0.80–0.92, clamped ≤1.0)
         metalness: 0.0,
         envMapIntensity: 1.0,
@@ -671,7 +677,9 @@ export function clothField(): THREE.MeshPhysicalMaterial {
 // work pants (§1.2: weather-worn; ground contact takes the grime).
 export function clothFieldDark(): THREE.MeshPhysicalMaterial {
     const mat = new THREE.MeshPhysicalMaterial({
-        color: 0x3B4A1E,          // darker olive — ground-grime tone
+        // P-CANON-5 (p13): pants regraded to concept-character.pants median
+        // #231b14 (was 0x3B4A1E — same green-family problem as the jacket).
+        color: 0x231B14,          // canon work-pants brown (concept-character.pants)
         roughness: 1.0,           // muddiest cloth: map × 1.0 clamps at 1.0 in dips
         metalness: 0.0,
         envMapIntensity: 1.0,
@@ -682,6 +690,20 @@ export function clothFieldDark(): THREE.MeshPhysicalMaterial {
         mat.roughnessMap = getClothDetail().roughness;
     }
     return mat;
+}
+
+// Boot leather (P-CANON-5 p13): boots measured a distinct darker band than
+// harness leather (concept-character.boots median #141311); the old code
+// shared leatherDark() for both, flattening the costume's leather story.
+export function leatherBoot(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+        color: 0x141311,
+        roughness: 0.85,          // scuffed boot leather, duller than harness
+        metalness: 0.03,
+        normalMap: getNormalMap(),
+        roughnessMap: getNoiseMap(),
+        envMapIntensity: 1.0,
+    });
 }
 
 // Hair Dark (braid; strand roughness streaks + anisotropic highlight)

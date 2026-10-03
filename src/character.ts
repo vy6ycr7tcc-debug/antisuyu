@@ -3,7 +3,7 @@ import { InputManager } from './input.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { physics } from './physics.js';
 import { getGlobalTerrainHeight } from './terrain.js';
-import { skinNaira, clothField, clothFieldDark, hairDark, leatherDark } from './materials.js';
+import { skinNaira, clothField, clothFieldDark, hairDark, leatherDark, leatherBoot } from './materials.js';
 import { createMistTexture } from './textures.js';
 
 // P-MOBILE verification hook (docs/plans/phase-5-mobile-controls.md §P5.3):
@@ -128,7 +128,7 @@ export class CharacterController {
     // (the snap itself is the shared height function; geometry/rig stays).
     const bootGeo = new THREE.CylinderGeometry(0.07, 0.082, 0.26, 12);
     bootGeo.translate(0, -0.71, 0);
-    const bootMat = leatherDark();
+    const bootMat = leatherBoot();
 
     this.leftLeg = new THREE.Mesh(legGeo, pantsMat);
     this.leftLeg.position.set(-0.11, 0.8, 0);
@@ -494,6 +494,16 @@ export class CharacterController {
     // could not be captured).
     this.mesh.rotation.y = theta;
     this.theta = theta;
+    // P-FRESH: a teleport must not inherit the previous location's traversal
+    // state. The boot spawn sat in the river channel (V-WATER water table), so
+    // state became SWIM on frame 1 — and every later teleport (gate probes,
+    // save loads) carried SWIM with it, floating her at the swim height over
+    // dry lakebeds with no visible water. WALK re-enters SWIM on the next
+    // update if the destination really is river; forced states (shots) use
+    // setForceState AFTER teleport, which still wins.
+    this.state = MovementState.WALK;
+    this.stateTimer = 0;
+    this.speed = 0;
     this.updateCamera();
   }
 }

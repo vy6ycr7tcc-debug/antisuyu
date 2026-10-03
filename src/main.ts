@@ -341,8 +341,19 @@ async function init() {
     motes: snowParticles.points,
   };
 
-  const input = new InputManager();
+  // P-FRESH spawn site (measured, scripts/p13_spawn_survey.mjs): the old boot
+  // spawn (0,0) is the RIVER CHANNEL BED — h(0,0) = -10, isRiver true → SWIM
+  // from frame 1, bobbing/drifting down the flooded channel with no input
+  // ("you just see a world but the character doesn't even move"). The chosen
+  // site is the east bank: h(45,10) = 12.25 m, +13.3 m above the channel fill
+  // Wc(10) = -1.02, slope 0.19 (flat), WALK verified through the real state
+  // machine by the p13 spawn gate. theta=π faces her -z (boot camera sits
+  // behind her back, third-person).
+  const SPAWN_X = 45;
+  const SPAWN_Z = 10;
+  const SPAWN_THETA = Math.PI;
 
+  const input = new InputManager();
   // P-MOBILE: the touch layer mounts its UI only on touch-capable devices
   // (or &touch=1 for desktop verification captures — plan §P5.3).
   const touchMode = isTouchLikeDevice() || urlParams.get('touch') === '1';
@@ -1224,10 +1235,10 @@ async function init() {
         flags.restore(data.questFlags);
       } else {
         console.warn('No save found in slot 0 to load.');
-        character.teleport(0, 0);
+        character.teleport(SPAWN_X, SPAWN_Z, SPAWN_THETA);
       }
     } else {
-      character.teleport(0, 0);
+      character.teleport(SPAWN_X, SPAWN_Z, SPAWN_THETA);
     }
   }
 
